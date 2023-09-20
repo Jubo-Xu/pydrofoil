@@ -662,6 +662,16 @@ def test_genericbitvector():
     assert x.rval.and_(rbigint.fromint(1).lshift(1)).rshift(1).toint() == 1
     assert x.rval.and_(rbigint.fromint(1).lshift(2)).rshift(2).toint() == 1
 
+def test_slice_int_smallint():
+    x = SmallBitVector(2, r_uint(-1))
+    assert x.read_bit(0) == 1
+    assert x.read_bit(1) == 1
+    y = SmallInteger(0)
+    out = y.set_slice_int(2, 0, x)
+    assert out.val == 3
+
+
+
 @given(st.integers(min_value = -2**63, max_value = 2**63-1), st.integers(min_value = 0, max_value = 64), st.integers(min_value = 0, max_value = 65))
 def test_arith_shiftr_smallbitvector_hypothesis(val, size, n):
     if val < 0:

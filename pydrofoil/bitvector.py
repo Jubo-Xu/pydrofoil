@@ -409,12 +409,12 @@ class SmallInteger(Integer):
         return from_ruint(len, r_uint(n) & ((1 << len) - 1))
 
     def set_slice_int(self, len, start, bv):
+        if len > 64 or start >= 64:
+            return BigInteger._set_slice_int(self.tobigint, len, start)
         out_val = self.val
-        for i in range(0, bv._size):
-            if bv.read_bit(i) == 1:
-                out_val = out_val | (1 << (start+i))
-            else:
-                out_val = out_val & (~(1 << (start+i)))
+        slice_one = ((1 << bv._size) - 1) << start
+        out_val = out_val & (~slice_one)
+        out_val = out_val | (bv.toint() << start) & ((1 << (start + bv._size)) - 1)
         return SmallInteger(out_val)
 
     def eq(self, other):
@@ -525,28 +525,17 @@ class BigInteger(Integer):
             n = rval.rshift(start)
         return from_bigint(len, n.and_(rbigint.fromint(1).lshift(len).int_sub(1)))
 
-    # def set_slice_int(self, len, start, bv):
-    #     out_val = self.val
-    #     for i in range(0, bv._size):
-    #         if bv.read_bit(i) == 1:
-    #             out_val = out_val | (1 << (start+i))
-    #         else:
-    #             out_val = out_val & (~(1 << (start+i)))
-    #     return SmallInteger(out_val)
-
     def set_slice_int(self, len, start, bv):
         return self._set_slice_int(self.rval, len, start, bv)
-    
+
     @staticmethod
     def _set_slice_int(rval, len, start, bv):
         out_val = rval
-        for i in range(0, bv._size):
-            if bv.rval.and_(ONERBIGINT.lshift(i)).rshift(i).toint() == 1:
-                out_val = out_val.or_(rbigint.fromstr(str(1 << (start+i))))
-            else:
-                out_val = out_val.and_(rbigint.fromstr(str(~(1 << (start+i)))))
+        slice_one = ONERBIGINT.lshift(bv._size).int_sub(1).lshift(start)
+        out_val = out_val.and_(slice_one.invert())
+        out_val = out_val.or_(bv.tobigint().lshift(start).and_(ONERBIGINT.lshift(start+bv._size).int_sub(1)))
         return BigInteger(out_val)
-
+    
     def eq(self, other):
         if isinstance(other, SmallInteger):
             return self.rval.int_eq(other.val)
