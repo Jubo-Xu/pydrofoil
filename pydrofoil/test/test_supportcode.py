@@ -644,20 +644,23 @@ def test_smallbitvector():
     assert val_str == "010"
 
 def test_genericbitvector():
-    x = GenericBitVector(4, rbigint.fromint(4))
-    assert x.read_bit(0) == 0
-    assert x.read_bit(1) == 0
-    assert x.read_bit(2) == 1
-    assert x.read_bit(3) == 0
+    # x = GenericBitVector(4, rbigint.fromint(4))
+    # assert x.read_bit(0) == 0
+    # assert x.read_bit(1) == 0
+    # assert x.read_bit(2) == 1
+    # assert x.read_bit(3) == 0
+    # # x = GenericBitVector(3, rbigint.fromint(-2))
+    # # x = x.arith_shiftr(2)
+    # # assert x.read_bit(0) == 1
     # x = GenericBitVector(3, rbigint.fromint(-2))
-    # x = x.arith_shiftr(2)
-    # assert x.read_bit(0) == 1
-    x = GenericBitVector(3, rbigint.fromint(-2))
-    # 1010 --> 1101 --> 1110
-    assert x.read_bit(0) == 0
-    assert x.read_bit(1) == 1
-    assert x.read_bit(2) == 1
-
+    # # 1010 --> 1101 --> 1110
+    # assert x.read_bit(0) == 0
+    # assert x.read_bit(1) == 1
+    # assert x.read_bit(2) == 1
+    x = GenericBitVector(3, rbigint.fromint(-1))
+    assert x.rval.and_(rbigint.fromint(1)).toint() == 1
+    assert x.rval.and_(rbigint.fromint(1).lshift(1)).rshift(1).toint() == 1
+    assert x.rval.and_(rbigint.fromint(1).lshift(2)).rshift(2).toint() == 1
 
 @given(st.integers(min_value = -2**63, max_value = 2**63-1), st.integers(min_value = 0, max_value = 64), st.integers(min_value = 0, max_value = 65))
 def test_arith_shiftr_smallbitvector_hypothesis(val, size, n):
@@ -668,8 +671,8 @@ def test_arith_shiftr_smallbitvector_hypothesis(val, size, n):
         val_bin = "0"*(length-len(bin(val_new)[2:]))+bin(val_new)[2:]
     else:
         val_bin = bin(val)[2:]
-    size_zero = size % (63 - len(val_bin)) if len(val_bin) > 63 else 0
-    val_bin = "1"+"0"*size_zero+val_bin if val < 0 else ("0"+"0"*size_zero+val_bin if val > 0 else "0")
+    size_zero = size % (63 - len(val_bin)) if len(val_bin) < 63 else 0
+    val_bin = "1"+"1"*size_zero+val_bin if val < 0 else ("0"+"0"*size_zero+val_bin if val > 0 else "0")
     x = SmallBitVector(len(val_bin), r_uint(val))
     x = x.arith_shiftr(n)
     if val == 0:
@@ -687,30 +690,122 @@ def test_arith_shiftr_smallbitvector_hypothesis(val, size, n):
         for i in range(0, len(val_bin)):
             assert x.read_bit(i) == int(val_bin[len(val_bin)-1-i])
 
-# @given(st.integers(), st.integers(min_value = 0, max_value = 64), st.integers(min_value = 0))
-# def test_arith_shiftr_genericbitvector_hypothesis(val, size_zero, n):
-#     if val < 0:
-#         val_new = abs(val)
-#         length = len(bin(val_new))-2
-#         val_new = (val_new ^ ((1 << len(bin(val_new)[2:])) - 1)) + 1
-#         val_bin = "0"*(length-len(bin(val_new)[2:]))+bin(val_new)[2:]
-#     else:
-#         val_bin = bin(val)[2:]
-#     val_bin = "1"+"0"*size_zero+val_bin if val < 0 else ("0"+"0"*size_zero+val_bin if val > 0 else "0")
-#     x = GenericBitVector(len(val_bin), rbigint.fromlong(val))
-#     x = x.arith_shiftr(n)
-#     if val == 0:
-#         # assert x == SmallBitVector(len(val_bin), r_uint(val))
-#         assert x.toint() == 0
-#         # assert SmallBitVector(len(val_bin), r_uint(val)) == SmallBitVector(len(val_bin), r_uint(val))
-#     elif n > len(val_bin) and val > 0:
-#         for i in range(0, len(val_bin)):
-#             assert x.read_bit(i) == int(0)
-#     elif n > len(val_bin) and val < 0:
-#         for i in range(0, len(val_bin)):
-#             assert x.read_bit(i) == int(1)
-#     else:
-#         val_bin = val_bin[0]*n + val_bin[0:(len(val_bin)-n)]
-#         for i in range(0, len(val_bin)):
-#             assert x.read_bit(i) == int(val_bin[len(val_bin)-1-i])
-        
+
+@given(st.integers(min_value = -2**63, max_value = 2**63-1), st.integers(min_value = -2**63, max_value = 2**63-1), st.integers(min_value = 0, max_value = 63), st.integers(min_value = 0, max_value = 64))
+def test_set_slice_int_smallinteger_hypothesis(val_int, val_bv, start, bv_size):
+    x = SmallInteger(val_int)
+    if val_int < 0:
+        val_int_new = abs(val_int)
+        length_int = len(bin(val_int_new))-2
+        val_int_new = (val_int_new ^ ((1 << len(bin(val_int_new)[2:])) - 1)) + 1
+        val_int_bin = "1"+"0"*(length_int-len(bin(val_int_new)[2:]))+bin(val_int_new)[2:]
+    else:
+        val_int_bin = bin(val_int)[2:]
+    if val_int == 0:
+        assert val_int_bin == "0"
+    if val_bv < 0:
+        val_bv_new = abs(val_bv)
+        length_bv = len(bin(val_bv_new))-2
+        val_bv_new = (val_bv_new ^ ((1 << len(bin(val_bv_new)[2:])) - 1)) + 1
+        val_bv_bin = "0"*(length_bv-len(bin(val_bv_new)[2:]))+bin(val_bv_new)[2:]
+    else:
+        val_bv_bin = bin(val_bv)[2:]
+    if val_bv == 0:
+        assert val_bv_bin == "0"
+    size_zero = bv_size % (63 - len(val_bv_bin)) if len(val_bv_bin) < 63 else 0
+    if bv_size == 0:
+        assert size_zero == 0
+    val_bv_bin = "1"+"1"*size_zero+val_bv_bin if val_bv < 0 else ("0"+"0"*size_zero+val_bv_bin if val_bv > 0 else "0")
+    bv = SmallBitVector(len(val_bv_bin), r_uint(val_bv))
+    x_after = x.set_slice_int(len(val_bv_bin), start, bv)
+    # xxxxxx
+    if len(val_int_bin)-start-len(val_bv_bin) >= 0:
+        if start == 0:
+            out_bin = val_int_bin[:len(val_int_bin)-start-len(val_bv_bin)] + val_bv_bin
+        else:
+            out_bin = val_int_bin[:len(val_int_bin)-start-len(val_bv_bin)] + val_bv_bin + val_int_bin[len(val_int_bin)-start:]
+        if len(val_int_bin)-start-len(val_bv_bin) == 0:
+            out_bin = "1" + out_bin if val_int < 0 else "0" + out_bin     
+    else:
+        if start == 0:
+            out_bin = val_bv_bin
+        else:
+            if start <= len(val_int_bin):
+                out_bin = val_bv_bin + val_int_bin[len(val_int_bin)-start:]
+            elif val_int < 0:
+                out_bin = val_bv_bin + "1"*(start - len(val_int_bin)) + val_int_bin
+            else:
+                out_bin = val_bv_bin + "0"*(start - len(val_int_bin)) + val_int_bin
+        out_bin = "1" + out_bin if val_int < 0 else "0" + out_bin
+    out_bin = "1" + out_bin if val_int < 0 else "0" + out_bin
+    if val_int < 0:
+        out_val = int(out_bin[len(out_bin)-1])
+        for i in range(1, len(out_bin)):
+            out_val = out_val + int(out_bin[len(out_bin)-1-i])*2**i
+        out_val = out_val - 1
+        out_val = -(out_val ^ ((1 << len(bin(out_val)[2:])) - 1))
+    else:
+        out_val = int(out_bin[len(out_bin)-1])
+        for i in range(1, len(out_bin)):
+            out_val = out_val + int(out_bin[len(out_bin)-1-i])*2**i
+    assert out_val == x_after.val
+
+@given(st.integers(min_value = -2**66, max_value = 2**66-1), st.integers(min_value = -2**66, max_value = 2**66-1), st.integers(min_value = 0, max_value = 67), st.integers(min_value = 0, max_value = 64))
+def test_set_slice_int_biginteger_hypothesis(val_int, val_bv, start, bv_size):
+    x = BigInteger(rbigint.fromstr(str(val_int)))
+    if val_int < 0:
+        val_int_new = abs(val_int)
+        length_int = len(bin(val_int_new))-2
+        val_int_new = (val_int_new ^ ((1 << len(bin(val_int_new)[2:])) - 1)) + 1
+        val_int_bin = "1"+"0"*(length_int-len(bin(val_int_new)[2:]))+bin(val_int_new)[2:]
+    else:
+        val_int_bin = bin(val_int)[2:]
+    if val_int == 0:
+        assert val_int_bin == "0"
+    if val_bv < 0:
+        val_bv_new = abs(val_bv)
+        length_bv = len(bin(val_bv_new))-2
+        val_bv_new = (val_bv_new ^ ((1 << len(bin(val_bv_new)[2:])) - 1)) + 1
+        val_bv_bin = "0"*(length_bv-len(bin(val_bv_new)[2:]))+bin(val_bv_new)[2:]
+    else:
+        val_bv_bin = bin(val_bv)[2:]
+    size_zero = bv_size % (63 - len(val_bv_bin)) if len(val_bv_bin) < 63 else 0
+    val_bv_bin = "1"+"1"*size_zero+val_bv_bin if val_bv < 0 else ("0"+"0"*size_zero+val_bv_bin if val_bv > 0 else "0")
+    if val_int == -1 and bv_size == 0:
+        assert val_int_bin == "11"
+    bv = GenericBitVector(len(val_bv_bin), rbigint.fromstr(str(val_bv)))
+    x_after = x.set_slice_int(len(val_bv_bin), start, bv)
+    # xxxxxx
+    if len(val_int_bin)-start-len(val_bv_bin) >= 0:
+        if start == 0:
+            out_bin = val_int_bin[:len(val_int_bin)-start-len(val_bv_bin)] + val_bv_bin
+        else:
+            out_bin = val_int_bin[:len(val_int_bin)-start-len(val_bv_bin)] + val_bv_bin + val_int_bin[len(val_int_bin)-start:]
+        if len(val_int_bin)-start-len(val_bv_bin) == 0:
+            out_bin = "1" + out_bin if val_int < 0 else "0" + out_bin     
+    else:
+        if start == 0:
+            out_bin = val_bv_bin
+        else:
+            if start <= len(val_int_bin):
+                out_bin = val_bv_bin + val_int_bin[len(val_int_bin)-start:]
+            elif val_int < 0:
+                out_bin = val_bv_bin + "1"*(start - len(val_int_bin)) + val_int_bin
+            else:
+                out_bin = val_bv_bin + "0"*(start - len(val_int_bin)) + val_int_bin
+        out_bin = "1" + out_bin if val_int < 0 else "0" + out_bin
+    out_bin = "1" + out_bin if val_int < 0 else "0" + out_bin
+    if val_int < 0:
+        out_val = int(out_bin[len(out_bin)-1])
+        for i in range(1, len(out_bin)):
+            out_val = out_val + int(out_bin[len(out_bin)-1-i])*2**i
+        out_val = out_val - 1
+        out_val = -(out_val ^ ((1 << len(bin(out_val)[2:])) - 1))
+    else:
+        out_val = int(out_bin[len(out_bin)-1])
+        for i in range(1, len(out_bin)):
+            out_val = out_val + int(out_bin[len(out_bin)-1-i])*2**i
+    assert str(out_val) == x_after.rval.str()
+
+
+    

@@ -6,6 +6,8 @@ from rpython.rlib.objectmodel import always_inline, specialize
 from rpython.rlib.rstring import (
     ParseStringError, ParseStringOverflowError)
 
+ONERBIGINT = rbigint.fromint(1)
+
 @always_inline
 @specialize.arg_or_var(0)
 def from_ruint(size, val):
@@ -406,6 +408,15 @@ class SmallInteger(Integer):
             return from_ruint(64, r_uint(n))
         return from_ruint(len, r_uint(n) & ((1 << len) - 1))
 
+    def set_slice_int(self, len, start, bv):
+        out_val = self.val
+        for i in range(0, bv._size):
+            if bv.read_bit(i) == 1:
+                out_val = out_val | (1 << (start+i))
+            else:
+                out_val = out_val & (~(1 << (start+i)))
+        return SmallInteger(out_val)
+
     def eq(self, other):
         if isinstance(other, SmallInteger):
             return self.val == other.val
@@ -513,6 +524,28 @@ class BigInteger(Integer):
         else:
             n = rval.rshift(start)
         return from_bigint(len, n.and_(rbigint.fromint(1).lshift(len).int_sub(1)))
+
+    # def set_slice_int(self, len, start, bv):
+    #     out_val = self.val
+    #     for i in range(0, bv._size):
+    #         if bv.read_bit(i) == 1:
+    #             out_val = out_val | (1 << (start+i))
+    #         else:
+    #             out_val = out_val & (~(1 << (start+i)))
+    #     return SmallInteger(out_val)
+
+    def set_slice_int(self, len, start, bv):
+        return self._set_slice_int(self.rval, len, start, bv)
+    
+    @staticmethod
+    def _set_slice_int(rval, len, start, bv):
+        out_val = rval
+        for i in range(0, bv._size):
+            if bv.rval.and_(ONERBIGINT.lshift(i)).rshift(i).toint() == 1:
+                out_val = out_val.or_(rbigint.fromstr(str(1 << (start+i))))
+            else:
+                out_val = out_val.and_(rbigint.fromstr(str(~(1 << (start+i)))))
+        return BigInteger(out_val)
 
     def eq(self, other):
         if isinstance(other, SmallInteger):
