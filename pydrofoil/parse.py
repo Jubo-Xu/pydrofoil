@@ -1,3 +1,4 @@
+import sys
 from rply import LexerGenerator, LexingError, ParserGenerator, ParsingError
 from rply.token import BaseBox
 
@@ -21,10 +22,11 @@ addkeyword('enum')
 addkeyword('union')
 addkeyword('struct')
 addkeyword('val')
+addkeyword('abstract')
 addkeyword('fn')
 addkeyword('end')
 addkeyword('arbitrary')
-addkeyword('failure')
+addkeyword('exit')
 addkeyword('goto')
 addkeyword('jump')
 addkeyword('register')
@@ -32,11 +34,13 @@ addkeyword('is')
 addkeyword('as')
 addkeyword('let')
 addkeyword('undefined')
+addkeyword('files')
 
 addtok('PERCENTENUM', r'%enum')
 addtok('PERCENTUNION', r'%union')
 addtok('PERCENTSTRUCT', r'%struct')
 addtok('PERCENTVEC', r'%vec')
+addtok('PERCENTFVEC', r'%fvec')
 addtok('PERCENTLIST', r'%list')
 
 addtok('BINBITVECTOR', r'0b[01]+')
@@ -45,7 +49,7 @@ addtok('NUMBER', r'-?\d+')
 addtok('NAME', r'[a-zA-Z_%@$][a-zA-Z_0-9]*')
 addtok('STRING', r'"[^"]*"')
 addtok('ARROW', r'->')
-addtok('BACKTICK', r'`')
+addtok('SOURCEPOS', r'`[^;]+')
 addtok('LPAREN', r'[(]')
 addtok('RPAREN', r'[)]')
 addtok('LBRACE', r'[{]')
@@ -59,6 +63,7 @@ addtok('GT', r'[>]')
 addtok('DOT', r'[.]')
 addtok('AMPERSAND', r'[&]')
 addtok('STAR', r'[*]')
+addtok('HASH', r'#')
 
 lg.ignore(r'[ \n]')
 
@@ -74,7 +79,7 @@ class Visitor(object):
         if meth is not None:
             return meth(ast)
         return self.default_visit(ast)
-    
+
     def default_visit(self, ast):
         pass
 
@@ -121,15 +126,22 @@ class BaseAst(BaseBox):
         for target, label in arcs:
             dotgen.emit_edge(str(id(self)), str(id(target)), label)
 
-    def visit(self, visitor):
-        visitor.visit(self)
+    def mutate_with(self, visitor):
+        result = visitor.visit(self)
+        if result is not None:
+            return result
         for key, value in self.__dict__.items():
             if isinstance(value, BaseAst):
-                value.visit(visitor)
+                newvalue = value.mutate_with(visitor)
+                if newvalue is not None:
+                    setattr(self, key, newvalue)
+                    visitor.changed = True
             elif isinstance(value, list) and value and isinstance(value[0], BaseAst):
-                for item in value:
-                    item.visit(visitor)
-
+                for i, item in enumerate(value):
+                    newitem = item.mutate_with(visitor)
+                    if newitem is not None:
+                        value[i] = newitem
+                        visitor.changed = True
 
 class File(BaseAst):
     def __init__(self, declarations, sourcepos=None):
@@ -156,17 +168,32 @@ class Struct(Declaration):
         self.types = types
 
 class GlobalVal(Declaration):
+    resolved_type = None
+
+    def __init__(self, name, definition, typ, sourcepos=None):
+        self.name = name
+        self.definition = definition
+        self.typ = typ
+
+class Abstract(Declaration):
+    resolved_type = None
+
     def __init__(self, name, definition, typ, sourcepos=None):
         self.name = name
         self.definition = definition
         self.typ = typ
 
 class Register(Declaration):
-    def __init__(self, name, typ):
+    resolved_type = None
+
+    def __init__(self, name, typ, body=None):
         self.name = name
         self.typ = typ
+        self.body = body
 
 class Let(Declaration):
+    resolved_type = None
+
     def __init__(self, name, typ, body):
         self.name = name
         self.typ = typ
@@ -189,7 +216,7 @@ class Function(Declaration):
         for index, op in enumerate(self.body):
             if isinstance(op, End):
                 pass
-            elif isinstance(op, Failure):
+            elif isinstance(op, Exit):
                 pass
             elif isinstance(op, Goto):
                 dotgen.emit_edge(str(id(op)), str(id(self.body[op.target])))
@@ -199,6 +226,26 @@ class Function(Declaration):
             else:
                 dotgen.emit_edge(str(id(op)), str(id(self.body[index + 1])))
 
+class OpLinkedList(BaseAst):
+    def __init__(self, curr, next):
+        self.op = curr
+        self.next = next
+
+    def collect(self):
+        res = []
+        while self is not None:
+            res.append(self.op)
+            self = self.next
+        return res
+
+class Pragma(Declaration):
+    def __init__(self, name, content):
+        self.name = name
+        self.content = content
+
+class Files(Declaration):
+    def __init__(self, filenames):
+        self.filenames = filenames
 
 class Type(BaseAst):
     pass
@@ -243,38 +290,141 @@ class VecType(Type):
     def __init__(self, of):
         self.of = of
 
+class FVecType(Type):
+    def __init__(self, number, of):
+        self.number = number
+        self.of = of
+
 class Statement(BaseAst):
     end_of_block = False
 
-class LocalVarDeclaration(Statement):
-    def __init__(self, name, typ, value=None):
+    def find_used_vars(self):
+        raise NotImplementedError
+
+    def replace_var(self, var, expr):
+        raise NotImplementedError
+
+class StatementWithSourcePos(Statement):
+    sourcepos = None
+    def add_sourcepos(self, sourcepos):
+        self.sourcepos = sourcepos
+        return self
+
+class LocalVarDeclaration(StatementWithSourcePos):
+    def __init__(self, name, typ, value=None, sourcepos=None):
         self.name = name
         self.typ = typ
         self.value = value
+        self.sourcepos = sourcepos
 
-class Operation(Statement):
-    def __init__(self, result, name, args):
+    def find_used_vars(self):
+        if self.value:
+            return self.value.find_used_vars()
+        return set()
+
+    def replace_var(self, var, expr):
+        xxx
+
+class GeneralAssignment(StatementWithSourcePos):
+    def __init__(self, lhs, rhs, sourcepos=None, resolved_type=None):
+        self.lhs = lhs
+        self.rhs = rhs
+        self.sourcepos = sourcepos
+        self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        if isinstance(self.lhs, StructElementAssignment):
+            res = self.lhs.obj.find_used_vars()
+        else:
+            res = self.lhs.ref.find_used_vars()
+        for arg in self.rhs.args:
+            res.update(arg.find_used_vars())
+        return res
+
+    def replace_var(self, var, expr):
+        return GeneralAssignment(self.lhs.replace_var(var, expr), self.rhs.replace_var(var, expr), self.sourcepos, self.resolved_type)
+
+
+class Assignment(StatementWithSourcePos):
+    def __init__(self, result, value, sourcepos=None, resolved_type=None):
+        self.result = result
+        self.value = value
+        self.sourcepos = sourcepos
+        self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        return self.value.find_used_vars()
+
+    def replace_var(self, var, expr):
+        return Assignment(
+            self.result,
+            self.value.replace_var(var, expr),
+            self.sourcepos,
+            self.resolved_type,
+        )
+
+class Operation(StatementWithSourcePos):
+    def __init__(self, result, name, args, sourcepos=None, resolved_type=None):
         self.result = result
         self.name = name
         self.args = args
+        self.sourcepos = sourcepos
+        self.resolved_type = resolved_type
 
-class TemplatedOperation(Statement):
-    def __init__(self, result, name, templateparam, args):
+    def find_used_vars(self):
+        res = set()
+        for val in self.args:
+            res.update(val.find_used_vars())
+        return res
+
+    def replace_var(self, var, expr):
+        newargs = [arg.replace_var(var, expr) for arg in self.args]
+        return Operation(self.result, self.name, newargs, self.sourcepos, self.resolved_type)
+
+
+class TemplatedOperation(StatementWithSourcePos):
+    def __init__(self, result, name, templateparam, args, sourcepos=None, resolved_type=None):
         self.result = result
         self.name = name
         self.templateparam = templateparam
         self.args = args
+        self.sourcepos = sourcepos
+        self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        res = set()
+        for val in self.args:
+            res.update(val.find_used_vars())
+        return res
+
+    def replace_var(self, var, expr):
+        newargs = [arg.replace_var(var, expr) for arg in self.args]
+        return TemplatedOperation(self.result, self.name,
+                self.templateparam, newargs,
+                self.sourcepos,
+                self.resolved_type)
+
 
 class Goto(Statement):
     end_of_block = True
     def __init__(self, target):
         self.target = target
 
-class ConditionalJump(Statement):
-    def __init__(self, condition, target, sourcecomment):
+    def find_used_vars(self):
+        return set()
+
+class ConditionalJump(StatementWithSourcePos):
+    def __init__(self, condition, target, sourcepos=None):
         self.condition = condition
         self.target = target
-        self.sourcecomment = sourcecomment
+        self.sourcepos = sourcepos
+
+    def find_used_vars(self):
+        return self.condition.find_used_vars()
+
+    def replace_var(self, var, expr):
+        newcond = self.condition.replace_var(var, expr)
+        return ConditionalJump(newcond, self.target, self.sourcepos)
 
 class Condition(BaseAst):
     pass
@@ -283,87 +433,288 @@ class ExprCondition(Condition):
     def __init__(self, expr):
         self.expr = expr
 
+    def find_used_vars(self):
+        return self.expr.find_used_vars()
+
+    def replace_var(self, var, expr):
+        return ExprCondition(self.expr.replace_var(var, expr))
+
 class Comparison(Condition):
     def __init__(self, operation, args):
         self.operation = operation
         self.args = args
 
+    def find_used_vars(self):
+        res = set()
+        for val in self.args:
+            res.update(val.find_used_vars())
+        return res
+
+    def replace_var(self, var, expr):
+        newargs = [arg.replace_var(var, expr) for arg in self.args]
+        return Comparison(self.operation, newargs)
+
 class UnionVariantCheck(Condition):
-    def __init__(self, var, variant):
+    def __init__(self, var, variant, resolved_type=None):
         self.var = var
         self.variant = variant
+        self.resolved_type = resolved_type
 
-class Assignment(Statement):
-    def __init__(self, result, value):
-        self.result = result
-        self.value = value
+    def find_used_vars(self):
+        return self.var.find_used_vars()
 
-class TupleElementAssignment(Statement):
-    def __init__(self, tup, index, value):
-        self.tup = tup
-        self.index = index
-        self.value = value
+    def replace_var(self, var, expr):
+        return UnionVariantCheck(self.var.replace_var(var, expr), self.variant, self.resolved_type)
 
-class StructElementAssignment(Statement):
-    def __init__(self, obj, field, value):
+class StructElementAssignment(StatementWithSourcePos):
+    def __init__(self, obj, fields, value, resolved_type=None, sourcepos=None):
         self.obj = obj
-        self.field = field
+        self.fields = fields
         self.value = value
+        self.resolved_type = resolved_type
+        self.sourcepos = sourcepos
 
-class RefAssignment(Statement):
-    def __init__(self, ref, value):
+    def find_used_vars(self):
+        res = self.obj.find_used_vars()
+        res.update(self.value.find_used_vars())
+        return res
+
+    def replace_var(self, var, expr):
+        return StructElementAssignment(
+            self.obj.replace_var(var, expr),
+            self.fields,
+            self.value.replace_var(var, expr) if self.value is not None else self.value,
+            self.resolved_type,
+            self.sourcepos)
+
+
+class RefAssignment(StatementWithSourcePos):
+    def __init__(self, ref, value, resolved_type=None, sourcepos=None):
         self.ref = ref
         self.value = value
+        self.sourcepos = sourcepos
+        self.resolved_type = resolved_type
 
-class End(Statement):
-    end_of_block = True
+    def find_used_vars(self):
+        res = self.value.find_used_vars()
+        res.add(self.ref)
+        return res
 
-class Failure(Statement):
-    end_of_block = True
+    def replace_var(self, var, expr):
+        return RefAssignment(self.ref.replace_var(var, expr), self.value, self.sourcepos)
 
-class Arbitrary(Statement):
-    end_of_block = True
-
-class Expression(BaseAst):
+class FunctionEndingStatement(StatementWithSourcePos):
     pass
 
+class End(FunctionEndingStatement):
+    end_of_block = True
+
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        xxx
+
+class Exit(FunctionEndingStatement):
+    end_of_block = True
+
+    def __init__(self, kind, sourcepos=None):
+        self.kind = kind
+        self.sourcepos = sourcepos
+
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        xxx
+
+class Arbitrary(FunctionEndingStatement):
+    end_of_block = True
+
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        xxx
+
+class Expression(BaseAst):
+    resolved_type = None
+
+    def find_used_vars(self):
+        raise NotImplementedError
+
+    def replace_var(self, var, expr):
+        xxx
+
 class Var(Expression):
-    def __init__(self, name):
+    def __init__(self, name, resolved_type=None):
         self.name = name
+        self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        return {self.name}
+
+    def replace_var(self, var, expr):
+        if self.name == var:
+            return expr
+        return self
+
 
 class Number(Expression):
-    def __init__(self, number):
+    def __init__(self, number, resolved_type=None):
         self.number = number
+        if resolved_type:
+            self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        return self
 
 class BitVectorConstant(Expression):
-    def __init__(self, constant):
+    def __init__(self, constant, resolved_type=None):
         self.constant = constant
+        if resolved_type:
+            self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        return self
 
 class FieldAccess(Expression):
-    def __init__(self, obj, element):
-        self.obj = obj
+    def __init__(self, obj, element, resolved_type=None):
+        self.obj = obj # expr
         self.element = element
+        self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        return self.obj.find_used_vars()
+
+    def replace_var(self, var, expr):
+        return FieldAccess(
+            self.obj.replace_var(var, expr),
+            self.element,
+            self.resolved_type,
+        )
 
 class Cast(Expression):
-    def __init__(self, expr, variant):
+    def __init__(self, expr, variant, resolved_type=None):
         self.expr = expr
         self.variant = variant
+        self.resolved_type = resolved_type
+
+    def find_used_vars(self):
+        return self.expr.find_used_vars()
+
+    def replace_var(self, var, expr):
+        return Cast(
+            self.expr.replace_var(var, expr),
+            self.variant,
+            self.resolved_type,
+        )
 
 class RefOf(Expression):
     def __init__(self, expr):
         self.expr = expr
 
+    def find_used_vars(self):
+        return self.expr.find_used_vars()
+
+    def replace_var(self, var, expr):
+        return RefOf(self.expr.replace_var(var, expr))
+
 class String(Expression):
     def __init__(self, string):
         self.string = string
 
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        return self
+
 class Unit(Expression):
-    pass
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        return self
+
 
 class Undefined(Expression):
     def __init__(self, typ):
         self.typ = typ
 
+    def find_used_vars(self):
+        return set()
+
+    def replace_var(self, var, expr):
+        return self
+
+
+class StructConstruction(Expression):
+    def __init__(self, name, fieldnames, fieldvalues):
+        self.name = name
+        self.fieldnames = fieldnames
+        self.fieldvalues = fieldvalues
+
+    def find_used_vars(self):
+        res = set()
+        for val in self.fieldvalues:
+            res.update(val.find_used_vars())
+        return res
+
+    def replace_var(self, var, expr):
+        fieldvalues = [val.replace_var(var, expr) for val in self.fieldvalues]
+        return StructConstruction(self.name, self.fieldnames, fieldvalues)
+
+class StructField(BaseAst):
+    def __init__(self, fieldname, fieldvalue):
+        self.fieldname = fieldname
+        self.fieldvalue = fieldvalue
+
+# some ASTs only used during optimization
+
+class OperationExpr(Expression):
+    def __init__(self, name, args, resolved_type, sourcepos=None):
+        from pydrofoil import types
+        assert isinstance(resolved_type, types.Type)
+        self.name = name
+        self.args = args
+        self.resolved_type = resolved_type
+        self.sourcepos = sourcepos
+
+    def find_used_vars(self):
+        res = set()
+        for val in self.args:
+            res.update(val.find_used_vars())
+        return res
+
+    def replace_var(self, var, expr):
+        newargs = [arg.replace_var(var, expr) for arg in self.args]
+        return OperationExpr(self.name, newargs, self.resolved_type,
+                self.sourcepos)
+
+class CastExpr(Expression):
+    def __init__(self, expr, resolved_type, sourcepos=None):
+        from pydrofoil import types
+        assert isinstance(resolved_type, types.Type)
+        while isinstance(expr, CastExpr): # remove double cast
+            expr = expr.expr
+        self.expr = expr
+        self.resolved_type = resolved_type
+        if sourcepos:
+            self.sourcepos = sourcepos
+
+    def find_used_vars(self):
+        return self.expr.find_used_vars()
+
+    def replace_var(self, var, expr):
+        expr = self.expr.replace_var(var, expr)
+        return CastExpr(expr, self.resolved_type)
 
 # ____________________________________________________________
 # parser
@@ -376,7 +727,7 @@ def file(p):
         return File(p)
     return File(p[0].declarations + [p[1]])
 
-@pg.production('declaration : enum | union | struct | globalval | function | register | let')
+@pg.production('declaration : enum | union | struct | globalval | function | register | let | pragma | files | abstract')
 def declaration(p):
     return p[0]
 
@@ -414,9 +765,18 @@ def globalval(p):
     else:
         return GlobalVal(p[1].value, p[3].value, p[5])
 
+@pg.production('abstract : ABSTRACT NAME EQUAL STRING COLON type')
+def abstract(p):
+    return Abstract(p[1].value, p[3].value, p[5])
+
+counter = 0
 @pg.production('function : FN NAME LPAREN args RPAREN LBRACE operations RBRACE')
 def function(p):
-    return Function(p[1].value, p[3].args, p[6].body)
+    global counter
+    print "\033[1K\rPARSED FUNCTION", counter, p[1].value,
+    sys.stdout.flush()
+    counter += 1
+    return Function(p[1].value, p[3].args, p[6].collect())
 
 @pg.production('args : NAME | NAME COMMA args')
 def args(p):
@@ -425,41 +785,121 @@ def args(p):
     else:
         return Function(None, [p[0].value] + p[2].args, None)
 
-@pg.production('register : REGISTER NAME COLON type')
+@pg.production('register : REGISTER NAME COLON type | REGISTER NAME COLON type LBRACE operations RBRACE')
 def register(p):
-    return Register(p[1].value, p[3])
+    if len(p) == 4:
+        return Register(p[1].value, p[3])
+    return Register(p[1].value, p[3], p[5].collect())
 
 @pg.production('let : LET LPAREN NAME COLON type RPAREN LBRACE operations RBRACE')
 def let(p):
-    return Let(p[2].value, p[4], p[7].body)
+    return Let(p[2].value, p[4], p[7].collect())
+
+@pg.production('pragma : HASH NAME pragmacontent')
+def pragma(p):
+    return Pragma(p[1].value, p[2].content)
+
+@pg.production('pragmacontent : NAME | NAME pragmacontent')
+def pragmacontent(p):
+    if len(p) == 1:
+        return Pragma(None, [p[0].value])
+    else:
+        return Pragma(None, [p[0].value] + p[1].content)
+
+@pg.production('files : FILES filescontent')
+def files(p):
+    return p[1]
+
+@pg.production('filescontent : STRING | STRING filescontent')
+def filescontent(p):
+    if len(p) == 1:
+        return Files([p[0].value])
+    else:
+        return Files([p[0].value] + p[1].filenames)
 
 @pg.production('operations : operation SEMICOLON | operation SEMICOLON operations')
 def operations(p):
     if len(p) == 2:
-        return Function(None, None, [p[0]])
+        return OpLinkedList(p[0], None)
     else:
-        return Function(None, None, [p[0]] + p[2].body)
+        return OpLinkedList(p[0], p[2])
 
 # operations
 
-@pg.production('operation : localvardeclaration | op | templatedop | conditionaljump | goto | assignment | end | failure | arbitrary')
+@pg.production('operation : operationwithposition SOURCEPOS | end | goto | arbitrary ')
 def operation(p):
+    if len(p) == 2:
+        return p[0].add_sourcepos(p[1].value)
+    else:
+        return p[0]
+
+@pg.production('operationwithposition : localvardeclaration | conditionaljump | generalassign | exit')
+def operationwithposition(p):
     return p[0]
 
-@pg.production('localvardeclaration : NAME COLON type | NAME COLON type EQUAL expr')
+@pg.production("generalassign : lhs EQUAL rhs")
+def generalassign(p):
+    lhs, _, rhs = p
+    if isinstance(lhs, Var):
+        if isinstance(rhs, Operation):
+            return Operation(lhs.name, rhs.name, rhs.args, rhs.sourcepos)
+        if isinstance(rhs, TemplatedOperation):
+            return TemplatedOperation(lhs.name, rhs.name, rhs.templateparam, rhs.args, rhs.sourcepos)
+        if isinstance(rhs, Expression):
+            return Assignment(lhs.name, rhs)
+    if isinstance(lhs, StructElementAssignment):
+        if lhs.obj is None:
+            import pdb; pdb.set_trace()
+        if isinstance(rhs, Expression):
+            return StructElementAssignment(lhs.obj, lhs.fields, rhs, lhs.sourcepos)
+    if isinstance(lhs, RefAssignment):
+        if isinstance(rhs, Expression):
+            return RefAssignment(lhs.ref, rhs)
+    return GeneralAssignment(lhs, rhs)
+
+@pg.production("lhs : NAME | NAME STAR | NAME DOT morenames")
+def lhs(p):
+    if len(p) == 1:
+        return Var(p[0].value)
+    elif len(p) == 2:
+        return RefAssignment(Var(p[0].value), None)
+    else:
+        return StructElementAssignment(Var(p[0].value), p[2].fields, None)
+
+def assignment(p):
+    if len(p) == 3:
+        return Assignment(p[0].value, p[2])
+    if len(p) == 4:
+        return RefAssignment(Var(p[0].value), p[3])
+    else:
+        assert p[1].gettokentype() == "DOT"
+        return StructElementAssignment(Var(p[0].value), p[2].fields, p[4])
+
+@pg.production('morenames : NAME | NAME DOT morenames')
+def morenames(p):
+    if len(p) == 1:
+        return StructElementAssignment(None, [p[0].value], None)
+    return StructElementAssignment(None, [p[0].value] + p[2].fields, None)
+
+
+@pg.production("rhs : oprhs | templatedoprhs | expr")
+def rhs(p):
+    return p[0]
+
+@pg.production('localvardeclaration : NAME COLON type | NAME COLON type EQUAL expr | NAME COLON type EQUAL uint64c')
 def localvardeclaration(p):
     if len(p) == 3:
         return LocalVarDeclaration(p[0].value, p[2])
     return LocalVarDeclaration(p[0].value, p[2], p[4])
 
 
-@pg.production('op : NAME EQUAL NAME LPAREN opargs RPAREN')
-def op(p):
-    return Operation(p[0].value, p[2].value, p[4].args)
+@pg.production('oprhs : NAME LPAREN opargs RPAREN')
+def oprhs(p):
+    return Operation(None, p[0].value, p[2].args)
 
-@pg.production('templatedop : NAME EQUAL NAME COLON COLON LT expr GT LPAREN opargs RPAREN')
-def op(p):
-    return TemplatedOperation(p[0].value, p[2].value, p[6], p[9].args)
+@pg.production('templatedoprhs : NAME LT type GT LPAREN opargs RPAREN')
+def templatedoprhs(p):
+    return TemplatedOperation(None, p[0].value, p[2], p[5].args)
 
 @pg.production('opargs : expr | expr COMMA opargs')
 def opargs(p):
@@ -468,7 +908,7 @@ def opargs(p):
     else:
         return Operation(None, None, [p[0]] + p[2].args)
 
-@pg.production('expr : NAME | STRING | NUMBER | BINBITVECTOR | HEXBITVECTOR | UNDEFINED COLON type | expr DOT NAME | LPAREN RPAREN | expr AS NAME | AMPERSAND expr')
+@pg.production('expr : NAME | STRING | NUMBER | BINBITVECTOR | HEXBITVECTOR | UNDEFINED COLON type | expr DOT NAME | LPAREN RPAREN | expr AS NAME | AMPERSAND NAME | STRUCT structconstruction')
 def expr(p):
     if len(p) == 1:
         if p[0].gettokentype() == "NAME":
@@ -485,7 +925,9 @@ def expr(p):
         if p[0].gettokentype() == "LPAREN":
             return Unit()
         elif p[0].gettokentype() == "AMPERSAND":
-            return RefOf(p[1])
+            return RefOf(Var(p[1].value))
+        elif p[0].gettokentype() == "STRUCT":
+            return p[1]
     elif len(p) == 3:
         if p[1].gettokentype() == "COLON":
             return Undefined(p[2])
@@ -495,9 +937,31 @@ def expr(p):
             return Cast(p[0], p[2].value)
     assert 0
 
-@pg.production('conditionaljump : JUMP condition GOTO NUMBER BACKTICK STRING')
+@pg.production('uint64c : NAME LPAREN NUMBER RPAREN')
+def uint64c(p):
+    from pydrofoil import types
+    assert p[0].value == "UINT64_C"
+    return OperationExpr(p[0].value, [Number(int(p[2].value))], types.GenericBitVector())
+
+@pg.production('structconstruction : NAME LBRACE structconstructioncontent RBRACE')
+def structconstruction(p):
+    return StructConstruction(p[0].value, p[2].fieldnames, p[2].fieldvalues)
+
+@pg.production('structconstructioncontent : structfield | structfield COMMA structconstructioncontent')
+def structconstructioncontent(p):
+    if len(p) == 1:
+        return StructConstruction(None, [p[0].fieldname], [p[0].fieldvalue])
+    else:
+        return StructConstruction(None, [p[0].fieldname] + p[2].fieldnames, [p[0].fieldvalue] + p[2].fieldvalues)
+
+@pg.production('structfield : NAME EQUAL expr')
+def structfield(p):
+    return StructField(p[0].value, p[2])
+
+
+@pg.production('conditionaljump : JUMP condition GOTO NUMBER')
 def conditionaljump(p):
-    return ConditionalJump(p[1], int(p[3].value), p[5].value)
+    return ConditionalJump(p[1], int(p[3].value))
 
 @pg.production('condition : expr | NAME LPAREN opargs RPAREN | expr IS NAME ')
 def condition(p):
@@ -508,29 +972,16 @@ def condition(p):
     return UnionVariantCheck(p[0], p[2].value)
 
 @pg.production('goto : GOTO NUMBER')
-def op(p):
+def goto(p):
     return Goto(int(p[1].value))
-
-@pg.production('assignment : NAME EQUAL expr | NAME STAR EQUAL expr | NAME DOT NUMBER EQUAL expr | NAME DOT NAME EQUAL expr')
-def op(p):
-    if len(p) == 3:
-        return Assignment(p[0].value, p[2])
-    if len(p) == 4:
-        return RefAssignment(p[0].value, p[3])
-    elif p[2].gettokentype() == "NUMBER":
-        return TupleElementAssignment(p[0].value, int(p[2].value), p[4])
-    else:
-        assert p[2].gettokentype() == "NAME"
-        return StructElementAssignment(p[0].value, p[2].value, p[4])
-
 
 @pg.production('end : END')
 def end(p):
     return End()
 
-@pg.production('failure : FAILURE')
-def failure(p):
-    return Failure()
+@pg.production('exit : EXIT NAME')
+def exit(p):
+    return Exit(p[1].value)
 
 @pg.production('arbitrary : ARBITRARY')
 def arbitrary(p):
@@ -544,7 +995,7 @@ def arbitrary(p):
 def typ(p):
     return p[0]
 
-@pg.production('simpletype : namedtype | tupletype | enumtype | uniontype | structtype | reftype | vectype | listtype')
+@pg.production('simpletype : namedtype | tupletype | enumtype | uniontype | structtype | reftype | vectype | fvectype | listtype')
 def simpletype(p):
     return p[0]
 
@@ -575,7 +1026,7 @@ def uniontype(p):
 def structtype(p):
     return StructType(p[1].value)
 
-@pg.production('listtype : PERCENTLIST type')
+@pg.production('listtype : PERCENTLIST simpletype')
 def listtype(p):
     return ListType(p[1])
 
@@ -583,7 +1034,7 @@ def listtype(p):
 def functiontype(p):
     return FunctionType(p[0], p[2])
 
-@pg.production('reftype : AMPERSAND LPAREN structtype RPAREN')
+@pg.production('reftype : AMPERSAND LPAREN simpletype RPAREN')
 def reftype(p):
     return RefType(p[2])
 
@@ -591,10 +1042,14 @@ def reftype(p):
 def vectype(p):
     return VecType(p[2])
 
+@pg.production('fvectype : PERCENTFVEC LPAREN NUMBER COMMA simpletype RPAREN')
+def fvectype(p):
+    return FVecType(int(p[2].value), p[4])
+
 
 def print_conflicts():
     if parser.lr_table.rr_conflicts:
-        print("rr conflicts")  
+        print("rr conflicts")
     for rule_num, token, conflict in parser.lr_table.rr_conflicts:
         print(rule_num, token, conflict)
 
@@ -602,7 +1057,7 @@ def print_conflicts():
         print("sr conflicts")
     for rule_num, token, conflict in parser.lr_table.sr_conflicts:
         print(rule_num, token, conflict)
-        
+
 parser = pg.build()
 print_conflicts()
 

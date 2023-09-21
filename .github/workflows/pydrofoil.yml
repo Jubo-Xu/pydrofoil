@@ -1,8 +1,3 @@
-# This workflow will install Python dependencies, run tests and lint with a
-# single version of Python
-# For more information see:
-# https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
 name: Pydrofoil
 
 on:
@@ -64,7 +59,7 @@ jobs:
 
     - name: Boot Linux
       run: |
-        ./pydrofoil-riscv riscv/input/rv64-linux-4.15.0-gcc-7.2.0-64mb.bbl -l 230000000
+        ./pydrofoil-riscv --jit off riscv/input/rv64-linux-4.15.0-gcc-7.2.0-64mb.bbl -l 230000000
 
     - name: Upload binary
       uses: actions/upload-artifact@v3

@@ -241,12 +241,21 @@ class SmallBitVector(BitVectorWithSize):
 
     def subrange(self, n, m):
         assert 0 <= m <= n < self.size()
+<<<<<<< HEAD
         width = n - m + 1
         return SmallBitVector(width, self.subrange_unwrapped_res(n, m))
 
     def subrange_unwrapped_res(self, n, m):
         assert 0 <= m <= n < self.size()
         width = n - m + 1
+=======
+        width = n - m + 1
+        return SmallBitVector(width, self.subrange_unwrapped_res(n, m))
+
+    def subrange_unwrapped_res(self, n, m):
+        assert 0 <= m <= n < self.size()
+        width = n - m + 1
+>>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
         return ruint_mask(width, self.val >> m)
 
     @always_inline
@@ -742,7 +751,10 @@ class GenericBitVector(BitVectorWithSize):
     def pack(self):
         return (self.size(), r_uint(0xdeaddead), self.rval)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 
 class Integer(object):
     _attrs_ = []
@@ -1127,6 +1139,7 @@ class BigInteger(Integer):
 
     def pack(self):
         return (-23, self.rval)
+<<<<<<< HEAD
 
 
 
@@ -1139,3 +1152,5 @@ class BigInteger(Integer):
 
 ###################################################################################
 ###################################################################################
+=======
+>>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285

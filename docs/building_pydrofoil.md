@@ -16,7 +16,7 @@ working on the Sail model you likely have all of these already):
 - opam
 - python3
 - libffi and its development headers (package libffi-dev on Ubuntu)
-- Sail 0.14 (see next section).
+- Sail (see next section).
 
 On Ubuntu, you are able to install all of these with `apt` with the following
 command:
@@ -28,36 +28,11 @@ sudo apt install build-essential git opam python3 libffi-dev
 All the other Pydrofoil build requirements are downloaded automatically by the
 build scripts/Makefile.
 
-## Installing Sail 0.14
+## Installing Sail
 
-You can skip this subsection if you already have a Sail binary version 0.14
-installed. Otherwise, keep reading.
-
-[At the moment](https://github.com/pydrofoil/pydrofoil/issues/31) Pydrofoil
-only works with Sail 0.14, but we are working on 0.15 support. So in order to
-build Pydrofoil, you need to install Sail pinned to version 0.14. First install
-`opam`, the ocaml package manager, if you don't have it already.
-Then you can run (this assumes a bash shell):
-
-```
-opam switch create pydrofoil ocaml.4.13.1
-eval $(opam env --switch=pydrofoil)
-opam install sail=0.14
-```
-
-This will create a new ocaml environment and install Sail 0.14 into it.
-Therefore these steps are also safe to execute if you already have Sail 0.15
-installed. You can test that it worked by running:
-
-```
-sail -v
-```
-
-Which should print:
-
-```
-Sail 0.14 (sail2 @ opam)
-```
+Pydrofoil needs a very recent unreleased version of Sail. Therefore the build
+scripts will install it automatically in a local subdirectory. This will not
+interfere with any existing sail installation you might have.
 
 ## Building Pydrofoil Starting from a Sail-riscv checkout
 
@@ -80,8 +55,9 @@ chmod a+x build-pydrofoil-from-sail.sh
 ```
 This will
 - clone the pydrofoil repo from github
-- use sail to translate the ISA specifications into JIB files
-  (about 5 minutes)
+- build a local switch with a recent enough sail binary, as well as isla-sail
+- use isla-sail to translate the ISA specifications into JIB files (about 5
+  minutes)
 - download and use a pypy2.7 to translate the RPython-based pydrofoil source
   code into an executable (about 20 minutes)
 - copy the executable into the sail-riscv directory
