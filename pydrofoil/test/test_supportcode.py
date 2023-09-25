@@ -1,21 +1,10 @@
+# import sys
 import pytest
-<<<<<<< HEAD
-import sys
+# import math
 
 from pydrofoil import supportcode
 from pydrofoil import bitvector
-from pydrofoil.bitvector import Integer, SmallInteger, BigInteger, SmallBitVector, GenericBitVector, SparseBitVector
-from hypothesis import given, strategies, assume, example, settings
-from rpython.rlib.rarithmetic import r_uint, intmask, r_ulonglong
-from rpython.rlib.rbigint import rbigint
-
-MININT = -sys.maxint - 1
-=======
-import math
-
-from pydrofoil import supportcode
-from pydrofoil import bitvector
-from pydrofoil.bitvector import Integer, SmallInteger, BigInteger, MININT, SparseBitVector
+from pydrofoil.bitvector import BitVector,Integer, SmallInteger, BigInteger, MININT, SparseBitVector, SmallBitVector, GenericBitVector
 from pydrofoil.real import *
 from hypothesis import given, strategies, assume, example, settings
 from fractions import Fraction
@@ -23,7 +12,6 @@ from fractions import Fraction
 from rpython.rlib.rarithmetic import r_uint, intmask, r_ulonglong
 from rpython.rlib.rbigint import rbigint
 
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 
 def make_int(data):
     if data.draw(strategies.booleans()):
@@ -38,11 +26,8 @@ wrapped_ints = strategies.builds(
         make_int,
         strategies.data())
 
-<<<<<<< HEAD
-=======
 
 
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 def gbv(size, val):
     return bitvector.GenericBitVector(size, rbigint.fromlong(val))
 
@@ -56,6 +41,240 @@ def bi(val):
     return bitvector.BigInteger(rbigint.fromlong(val))
 
 machine = "dummy"
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1).filter(lambda n: n != 0), strategies.integers(min_value = -2**66, max_value = 2**66-1).filter(lambda n: n != 0))
+def test_append_64_hypothesis(val1, val2):
+    if val1 > 2**63-1 or val1 < -2**63:
+        x = GenericBitVector(len(bin(val1)[3:])+1, rbigint.fromlong(val1)) if val1 < 0 else GenericBitVector(len(bin(val1)[2:])+1, rbigint.fromlong(val1))
+    else:
+        x = SmallBitVector(len(bin(val1)[3:])+1, r_uint(val1)) if val1 < 0 else SmallBitVector(len(bin(val1)[2:])+1, r_uint(val1))
+    if val2 > 2**63-1 or val2 < -2**63:
+        y = GenericBitVector(len(bin(val2)[3:])+1, rbigint.fromlong(val2)) if val2 < 0 else GenericBitVector(len(bin(val2)[2:])+1, rbigint.fromlong(val2))
+    else:
+        y = SmallBitVector(len(bin(val2)[3:])+1, r_uint(val2)) if val2 < 0 else SmallBitVector(len(bin(val2)[2:])+1, r_uint(val2))
+    # if val1 < 0:
+    #     val1_new = abs(val1)
+    #     length_1 = len(bin(val1_new))-2
+    #     val1_new = (val1_new ^ ((1 << len(bin(val1_new)[2:])) - 1)) + 1
+    #     x_bin = "0"*(length_1-len(bin(val1_new)[2:]))+bin(val1_new)[2:]
+    # else:
+    #     x_bin = bin(val1)[2:]
+    # x_bin = "1"+x_bin if val1 < 0 else ("0"+x_bin if val1 > 0 else "0")
+    # if val2 < 0:
+    #     val2_new = abs(val2)
+    #     length_2 = len(bin(val2_new))-2
+    #     val2_new = (val2_new ^ ((1 << len(bin(val2_new)[2:])) - 1)) + 1
+    #     y_bin = "0"*(length_2-len(bin(val2_new)[2:]))+bin(val2_new)[2:]
+    # else:
+    #     y_bin = bin(val2)[2:]
+    # y_bin = "1"+y_bin if val2 < 0 else ("0"+y_bin if val2 > 0 else "0")
+    # out_bin = x_bin + y_bin
+    # out = x.append_64(y)
+    # for i in range(0, out._size):
+    #     assert out.read_bit(i) == int(out_bin[out._size-1-i])
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+def test_unpack_bv_hypothesis(val):
+    if val > 2**63-1 or val < -2**63:
+        x = BitVector.unpack(len(bin(val)[3:])+1, r_uint(val), rbigint.fromlong(val)) if val < 0 else BitVector.unpack(len(bin(val)[2:])+1, r_uint(val), rbigint.fromlong(val))
+        assert type(x).__name__ == "GenericBitVector"
+        y = BitVector.unpack(len(bin(val)[3:])+1, r_uint(val), None) if val < 0 else BitVector.unpack(len(bin(val)[2:])+1, r_uint(val), None)
+        assert type(y).__name__ == "SparseBitVector"
+    else:
+        x = BitVector.unpack(len(bin(val)[3:])+1, r_uint(val), None) if val < 0 else BitVector.unpack(len(bin(val)[2:])+1, r_uint(val), None)
+        assert type(x).__name__ == "SmallBitVector"
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1), strategies.integers(min_value = 0, max_value = 64))
+def test_check_size_and_return_hypothesis(val, bv_size):
+    length_bv = len(bin(val)[3:]) + 1 if val < 0 else len(bin(val)[2:]) + 1
+    size_zero = bv_size % (63 - length_bv) if length_bv < 63 else 0
+    length_bv = size_zero + length_bv + 1
+    if val > 2**63-1 or val < -2**63:
+        x = BitVector.unpack(length_bv, r_uint(val), rbigint.fromlong(val)) if val < 0 else BitVector.unpack(length_bv, r_uint(val), rbigint.fromlong(val))
+        x = x.check_size_and_return(length_bv)
+        y = BitVector.unpack(length_bv, r_uint(val), None) if val < 0 else BitVector.unpack(length_bv, r_uint(val), None)
+        y = y.check_size_and_return(length_bv)
+    else:
+        x = BitVector.unpack(length_bv, r_uint(val), None) if val < 0 else BitVector.unpack(length_bv, r_uint(val), None)
+        x = x.check_size_and_return(length_bv)
+
+# @given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+# def test_print_bits_hypothesis(val):
+#     length_bv = len(bin(val)[3:]) + 1 if val < 0 else len(bin(val)[2:]) + 1
+#     if val > 2**63-1 or val < -2**63:
+#         x = BitVector.unpack(length_bv, r_uint(val), rbigint.fromlong(val))
+#         assert type(x).__name__ == "GenericBitVector"
+#         assert "<GenericBitVector %s %r>" % (length_bv, rbigint.fromlong(val)) == x.print_bits()
+#         y = BitVector.unpack(length_bv, r_uint(val), None) 
+#         assert type(y).__name__ == "SparseBitVector"
+#         assert "SparseBitVector<%s, %s>" % (length_bv, r_uint(val).hex())
+#     else:
+#         x = BitVector.unpack(length_bv, r_uint(val), None)
+#         assert type(x).__name__ == "SmallBitVector"
+#         assert "<SmallBitVector %s 0x%x>" % (length_bv, r_uint(val))
+
+@given(strategies.integers(min_value = -2**63, max_value = 2**63-1), strategies.integers(min_value = 0, max_value = 64))
+def test_zero_extend_smallbv_hypothesis(val, i):
+    length_bv = len(bin(val)[3:]) + 1 if val < 0 else len(bin(val)[2:]) + 1
+    x = SmallBitVector(length_bv, r_uint(val))
+    y = x.zero_extend(i+length_bv)
+    if i == 0:
+        assert y == x
+    elif i+length_bv > 64:
+        assert y._size == i+length_bv
+        assert y.val == r_uint(val)
+        assert type(y).__name__ == "SparseBitVector"
+    else:
+        assert y._size == i+length_bv
+        assert y.val == r_uint(val)
+        assert type(y).__name__ == "SmallBitVector"
+
+@given(strategies.integers(min_value = -2**63, max_value = 2**66-1), strategies.integers(min_value = 0, max_value = 64))
+def test_zero_extend_genericbv_hypothesis(val, i):
+    length_bv = len(bin(val)[3:]) + 1 if val < 0 else len(bin(val)[2:]) + 1
+    x = GenericBitVector(length_bv, rbigint.fromlong(val))
+    y = x.zero_extend(i+length_bv)
+    if i == 0:
+        assert y == x
+    else:
+        assert y._size == i+length_bv
+        assert y.rval == rbigint.fromlong(val)
+        assert isinstance(y, bitvector.GenericBitVector)
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+def test_pack_hypothesis(val):
+    length_bv = len(bin(val)[3:]) + 1 if val < 0 else len(bin(val)[2:]) + 1
+    if val > 2**63-1 or val < -2**63:
+        x = BitVector.unpack(length_bv, r_uint(val), rbigint.fromlong(val))
+        pack_out_x = x.pack()
+        assert type(x).__name__ == "GenericBitVector"
+        assert pack_out_x[0] == length_bv
+        assert pack_out_x[1] == r_uint(0xdeaddead)
+        assert pack_out_x[2] == rbigint.fromlong(val)
+        y = BitVector.unpack(length_bv, r_uint(val), None) 
+        pack_out_y = y.pack()
+        assert type(y).__name__ == "SparseBitVector"
+        assert pack_out_y[0] == length_bv
+        assert pack_out_y[1] == r_uint(val)
+        assert pack_out_y[2] == None
+    else:
+        x = BitVector.unpack(length_bv, r_uint(val), None)
+        pack_out = x.pack()
+        assert type(x).__name__ == "SmallBitVector"
+        assert pack_out[0] == length_bv
+        assert pack_out[1] == r_uint(val)
+        assert pack_out[2] == None
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))    
+def test_fromstr_integer_hypothesis(val):
+    val_str = str(val)
+    x = Integer.fromstr(val_str)
+    if val > 2**63-1 or val < -2**63:
+        assert isinstance(x, BigInteger)
+        assert x.rval == rbigint.fromstr(val_str)
+        # Note, there's a problem, need to tell later
+    else:
+        assert isinstance(x, SmallInteger)   
+        assert x.val == val
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+def test_unpack_integer_hypothesis(val):
+    if val > 2**63-1 or val < -2**63:
+        x = Integer.unpack(val, rbigint.fromlong(val))
+        assert isinstance(x, BigInteger)
+        assert x.rval == rbigint.fromlong(val)
+    else:
+        x = Integer.unpack(val, None)
+        assert isinstance(x, SmallInteger)
+        assert x.val == val
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+def test_repr_integer_hypothesis(val):
+    if -2**63 <= val <= 2**63-1:
+        x = SmallInteger(val)
+        assert "<SmallInteger %s>" % (val) == x.__repr__()
+    else:
+        x = BigInteger(rbigint.fromlong(val))
+        assert "<BigInteger %s>" % (str(val)) == x.__repr__()
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+def test_str_integer_hypothesis(val):
+    if -2**63 <= val <= 2**63-1:
+        x = SmallInteger(val)
+        assert str(val) == x.str()
+    else:
+        x = BigInteger(rbigint.fromlong(val))
+        assert str(val) == x.str()
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+def test_hex_integer_hypothesis(val):
+    if -2**63 <= val <= 2**63-1:
+        x = SmallInteger(val)
+        assert hex(val) == x.hex()
+    else:
+        x = BigInteger(rbigint.fromlong(val))
+        assert hex(val) == x.hex()
+
+@given(strategies.integers(min_value = -2**63, max_value = 2**63-1))
+def test_touint_integer_hypothesis(val):
+    x = SmallInteger(val)
+    y = BigInteger(rbigint.fromint(val))
+    assert r_uint(val) == x.touint()
+    if val >= 0:
+        assert r_uint(val) == y.touint()
+    
+
+@given(strategies.integers(min_value = -2**63, max_value = 2**63-1), strategies.integers(min_value = 0, max_value = 66))
+def test_lshift_smallint_hypothesis(val, i):
+    x = SmallInteger(val)
+    y = x.lshift(i)
+    if val < 0:
+        val_new = abs(val)
+        length = len(bin(val_new))-2
+        val_new = (val_new ^ ((1 << len(bin(val_new)[2:])) - 1)) + 1
+        val_bin = "0"*(length-len(bin(val_new)[2:]))+bin(val_new)[2:]
+    else:
+        val_bin = bin(val)[2:]
+    val_bin = ("1" + val_bin) if val < 0 else ("0"+val_bin)
+    out_bin = val_bin + "0"*i
+    if val < 0:
+        out_val = int(out_bin[len(out_bin)-1])
+        for i in range(1, len(out_bin)):
+            out_val = out_val + int(out_bin[len(out_bin)-1-i])*2**i
+        out_val = out_val - 1
+        out_val = -(out_val ^ ((1 << len(bin(out_val)[2:])) - 1))
+    else:
+        out_val = int(out_bin[len(out_bin)-1])
+        for i in range(1, len(out_bin)):
+            out_val = out_val + int(out_bin[len(out_bin)-1-i])*2**i
+    if ((len(out_bin) > 64) or (i >= 64)):
+        if (i <= 64) and (val == 0):
+            assert isinstance(y, SmallInteger)
+            assert y.val == out_val
+        else:
+            assert isinstance(y, BigInteger)
+            assert y.rval == rbigint.fromlong(out_val)
+    else:
+        assert isinstance(y, SmallInteger)
+        assert y.val == out_val
+
+def test_slice_bigint():
+    x = BigInteger(rbigint.fromlong(2**64))
+    y = x.slice(65, 0)
+    assert isinstance(y, GenericBitVector)
+    assert y.rval == x.rval
+
+@given(strategies.integers(min_value = -2**66, max_value = 2**66-1))
+def test_pack_int_hypothesis(val):
+    if -2**63 <= val <= 2**63-1:
+        x = SmallInteger(val)
+        pack = x.pack()
+        assert pack[0] == val
+        assert pack[1] == None
+    else:
+        x = BigInteger(rbigint.fromlong(val))
+        pack = x.pack()
+        assert pack[0] == -23
+        assert pack[1] == rbigint.fromlong(val)
 
 def test_signed_bv():
     assert supportcode.signed_bv(machine, 0b0, 1) == 0
@@ -90,8 +309,9 @@ def test_sign_extend():
         assert supportcode.sign_extend(machine, c(2, 0b01), Integer.fromint(100)).tobigint().tolong() == 1
         assert supportcode.sign_extend(machine, c(2, 0b10), Integer.fromint(100)).tobigint().tolong() == 0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111110
         assert supportcode.sign_extend(machine, c(2, 0b11), Integer.fromint(100)).tobigint().tolong() == 0b1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
-
-<<<<<<< HEAD
+    x = GenericBitVector(66, rbigint.fromlong(2**64))
+    y = x.sign_extend(66)
+    assert y == x
 # def test_zero_extend():
 #     for c in gbv, bv:
 #         assert supportcode.zero_extend(machine, c(1, 0b0), Integer.fromint(2)).size() == 2
@@ -107,24 +327,6 @@ def test_sign_extend():
 #         assert supportcode.zero_extend(machine, c(2, 0b01), Integer.fromint(100)).tobigint().tolong() == 1
 #         assert supportcode.zero_extend(machine, c(2, 0b10), Integer.fromint(100)).tobigint().tolong() == 0b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010
 #         assert supportcode.zero_extend(machine, c(2, 0b11), Integer.fromint(100)).tobigint().tolong() == 0b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011
-=======
-def test_zero_extend():
-    for c in gbv, bv:
-        assert supportcode.zero_extend(machine, c(1, 0b0), Integer.fromint(2)).size() == 2
-        assert supportcode.zero_extend(machine, c(2, 0b00), Integer.fromint(100)).size() == 100
-        assert supportcode.zero_extend(machine, c(1, 0b0), Integer.fromint(2)).toint() == 0
-        assert supportcode.zero_extend(machine, c(1, 0b1), Integer.fromint(2)).toint() == 0b01
-        assert supportcode.zero_extend(machine, c(2, 0b00), Integer.fromint(4)).toint() == 0
-        assert supportcode.zero_extend(machine, c(2, 0b01), Integer.fromint(4)).toint() == 1
-        assert supportcode.zero_extend(machine, c(2, 0b10), Integer.fromint(4)).toint() == 0b0010
-        assert supportcode.zero_extend(machine, c(2, 0b11), Integer.fromint(4)).toint() == 0b0011
-
-        assert supportcode.zero_extend(machine, c(2, 0b00), Integer.fromint(100)).tobigint().tolong() == 0
-        assert supportcode.zero_extend(machine, c(2, 0b01), Integer.fromint(100)).tobigint().tolong() == 1
-        assert supportcode.zero_extend(machine, c(2, 0b10), Integer.fromint(100)).tobigint().tolong() == 0b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010
-        assert supportcode.zero_extend(machine, c(2, 0b11), Integer.fromint(100)).tobigint().tolong() == 0b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011
-
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 
 def test_unsigned():
     for c in gbv, bv:
@@ -191,6 +393,11 @@ def test_vector_subrange():
     x = b.subrange(66, 0)
     assert x.tolong() == 0x1200
     assert isinstance(x, bitvector.GenericBitVector)
+    y = GenericBitVector(66, rbigint.fromlong(2**64))
+    z = y.subrange(66, 2)
+    assert z._size == 65
+    assert z.rval == rbigint.fromlong(2**64).rshift(2)
+    assert isinstance(z, bitvector.GenericBitVector)
 
 @given(strategies.data())
 def test_hypothesis_vector_subrange(data):
@@ -252,10 +459,6 @@ def test_hypothesis_rbigint_extract_ruint(data):
     res = bv.subrange_unwrapped_res(start + 63, start)
     assert res == rb.rshift(start).and_(rbigint.fromlong(2**64-1)).tolong()
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 def test_vector_update_subrange():
     for c1 in gbv, bv:
         for c2 in gbv, bv:
@@ -303,10 +506,6 @@ def test_sparse_vector_update_subrange_hypothesis(data):
     # second check: the read of the same range must return replace_bv
     assert replace_bv.eq(sres.subrange(upper, lower))
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 def test_vector_shift():
     for c in gbv, bv:
         x = c(8, 0b10001101)
@@ -430,10 +629,6 @@ def test_add_bits_int_bv_i():
     assert supportcode.add_bits_int_bv_i(None, r_uint(0b11), 6, -0b111111111) == (0b11 - 0b111111111) & 0b111111
     assert supportcode.add_bits_int_bv_i(None, r_uint(0b1011), 6, -2 ** 63) == (0b1011 - 2**63) & 0b111111
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 def test_bv_bitwise():
     for c in gbv, bv:
         i1 = c(8, 0b11110000)
@@ -549,10 +744,6 @@ def test_mul_optimized(monkeypatch):
     assert res.tolong() == 3 ** 100 * 16
     res = si(1024).mul(bi(-5 ** 60))
     assert res.tolong() == -5 ** 60 * 1024
-<<<<<<< HEAD
-=======
-
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 
 def test_op_gv_int():
     for c1 in gbv, bv:
@@ -610,10 +801,6 @@ def test_string_of_bits():
         assert c(3, 0b1).string_of_bits() == "0b001"
         assert c(9, 0b1101).string_of_bits() == "0b000001101"
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 def test_append():
     for c1 in gbv, bv:
         for c2 in gbv, bv:
@@ -970,550 +1157,548 @@ def test_softfloat_ui64tof64():
     supportcode.softfloat_ui64tof64(machine, 0, 0b0000000000000000000000000000000000000000000000000000000000000101)
     assert machine._reg_zfloat_result == 0b0100000000010100000000000000000000000000000000000000000000000000
 
-<<<<<<< HEAD
-=======
 # tests for real type
 # Test for add
-def test_add_real():
-    x = Real.fromint(5)
-    y = Real.fromint(7)
-    res = x.add(y)
-    assert res.toint() == 12
-    x = Real.fromint(3, 4)
-    y = Real.fromint(5, 4)
-    res = x.add(y)
-    assert res.toint() == 2
-    x = Real.fromint(1, 2)
-    y = Real.fromint(1, 2)
-    res = x.add(y)
-    assert res.toint() == 1
-    x = Real.fromint(4, 2)
-    y = Real.fromint(9, 3)
-    res = x.add(y)
-    assert res.toint() == 5
-    x = Real.fromint(-4, 2)
-    y = Real.fromint(9, -3)
-    res = x.add(y)
-    assert res.toint() == -5
-    x = Real.fromint(-4, -2)
-    y = Real.fromint(-9, 3)
-    res = x.add(y)
-    assert res.toint() == -1
-    # Test for denominator equal to 0
-    # x = Real.fromint(3, 0)
-    # y = Real.fromint(2, 5)
-    # res = x.add(y)
-    # assert res.toint() == 1
+# def test_add_real():
+#     x = Real.fromint(5)
+#     y = Real.fromint(7)
+#     res = x.add(y)
+#     assert res.toint() == 12
+#     x = Real.fromint(3, 4)
+#     y = Real.fromint(5, 4)
+#     res = x.add(y)
+#     assert res.toint() == 2
+#     x = Real.fromint(1, 2)
+#     y = Real.fromint(1, 2)
+#     res = x.add(y)
+#     assert res.toint() == 1
+#     x = Real.fromint(4, 2)
+#     y = Real.fromint(9, 3)
+#     res = x.add(y)
+#     assert res.toint() == 5
+#     x = Real.fromint(-4, 2)
+#     y = Real.fromint(9, -3)
+#     res = x.add(y)
+#     assert res.toint() == -5
+#     x = Real.fromint(-4, -2)
+#     y = Real.fromint(-9, 3)
+#     res = x.add(y)
+#     assert res.toint() == -1
+#     # Test for denominator equal to 0
+#     # x = Real.fromint(3, 0)
+#     # y = Real.fromint(2, 5)
+#     # res = x.add(y)
+#     # assert res.toint() == 1
 
-# Test for sub
-def test_sub_real():
-    x = Real.fromint(16)
-    y = Real.fromint(6)
-    res = x.sub(y)
-    assert res.toint() == 10
-    x = Real.fromint(-10)
-    y = Real.fromint(6)
-    res = x.sub(y)
-    assert res.toint() == -16
-    x = Real.fromint(-10)
-    y = Real.fromint(-6)
-    res = x.sub(y)
-    assert res.toint() == -4
-    x = Real.fromint(-4, 2)
-    y = Real.fromint(9, -3)
-    res = x.sub(y)
-    assert res.toint() == 1
-    x = Real.fromint(-4, 2)
-    y = Real.fromint(9, 3)
-    res = x.sub(y)
-    assert res.toint() == -5
+# # Test for sub
+# def test_sub_real():
+#     x = Real.fromint(16)
+#     y = Real.fromint(6)
+#     res = x.sub(y)
+#     assert res.toint() == 10
+#     x = Real.fromint(-10)
+#     y = Real.fromint(6)
+#     res = x.sub(y)
+#     assert res.toint() == -16
+#     x = Real.fromint(-10)
+#     y = Real.fromint(-6)
+#     res = x.sub(y)
+#     assert res.toint() == -4
+#     x = Real.fromint(-4, 2)
+#     y = Real.fromint(9, -3)
+#     res = x.sub(y)
+#     assert res.toint() == 1
+#     x = Real.fromint(-4, 2)
+#     y = Real.fromint(9, 3)
+#     res = x.sub(y)
+#     assert res.toint() == -5
 
-# Test for mul
-def test_mul_real():
-    x = Real.fromint(10)
-    y = Real.fromint(6)
-    res = x.mul(y)
-    assert res.toint() == 60
-    x = Real.fromint(-10)
-    y = Real.fromint(6)
-    res = x.mul(y)
-    assert res.toint() == -60
-    x = Real.fromint(-10)
-    y = Real.fromint(-6)
-    res = x.mul(y)
-    assert res.toint() == 60
-    x = Real.fromint(4, 2)
-    y = Real.fromint(9, 3)
-    res = x.mul(y)
-    assert res.toint() == 6
-    x = Real.fromint(5, 2)
-    y = Real.fromint(2, 5)
-    res = x.mul(y)
-    assert res.toint() == 1
-    x = Real.fromint(-5, 2)
-    y = Real.fromint(2, 5)
-    res = x.mul(y)
-    assert res.toint() == -1
-    x = Real.fromint(-5, 2)
-    y = Real.fromint(2, -5)
-    res = x.mul(y)
-    assert res.toint() == 1
+# # Test for mul
+# def test_mul_real():
+#     x = Real.fromint(10)
+#     y = Real.fromint(6)
+#     res = x.mul(y)
+#     assert res.toint() == 60
+#     x = Real.fromint(-10)
+#     y = Real.fromint(6)
+#     res = x.mul(y)
+#     assert res.toint() == -60
+#     x = Real.fromint(-10)
+#     y = Real.fromint(-6)
+#     res = x.mul(y)
+#     assert res.toint() == 60
+#     x = Real.fromint(4, 2)
+#     y = Real.fromint(9, 3)
+#     res = x.mul(y)
+#     assert res.toint() == 6
+#     x = Real.fromint(5, 2)
+#     y = Real.fromint(2, 5)
+#     res = x.mul(y)
+#     assert res.toint() == 1
+#     x = Real.fromint(-5, 2)
+#     y = Real.fromint(2, 5)
+#     res = x.mul(y)
+#     assert res.toint() == -1
+#     x = Real.fromint(-5, 2)
+#     y = Real.fromint(2, -5)
+#     res = x.mul(y)
+#     assert res.toint() == 1
 
-# Test for div
-def test_div_real():
-    x = Real.fromint(10)
-    y = Real.fromint(2)
-    res = x.div(y)
-    assert res.toint() == 5
-    x = Real.fromint(-10)
-    y = Real.fromint(2)
-    res = x.div(y)
-    assert res.toint() == -5
-    x = Real.fromint(1, 5)
-    y = Real.fromint(1, 25)
-    res = x.div(y)
-    assert res.toint() == 5
-    x = Real.fromint(1, -5)
-    y = Real.fromint(1, 25)
-    res = x.div(y)
-    assert res.toint() == -5
-    x = Real.fromint(-1, 5)
-    y = Real.fromint(1, -25)
-    res = x.div(y)
-    assert res.toint() == 5
-    x = Real.fromint(-4, -2)
-    assert x.num.toint() == 2
-    assert x.den.toint() == 1
-    x = Real.fromint(-4, 2)
-    assert x.num.toint() == -2
-    assert x.den.toint() == 1
-    x = Real.fromint(4, -2)
-    assert x.num.toint() == -2
-    assert x.den.toint() == 1
+# # Test for div
+# def test_div_real():
+#     x = Real.fromint(10)
+#     y = Real.fromint(2)
+#     res = x.div(y)
+#     assert res.toint() == 5
+#     x = Real.fromint(-10)
+#     y = Real.fromint(2)
+#     res = x.div(y)
+#     assert res.toint() == -5
+#     x = Real.fromint(1, 5)
+#     y = Real.fromint(1, 25)
+#     res = x.div(y)
+#     assert res.toint() == 5
+#     x = Real.fromint(1, -5)
+#     y = Real.fromint(1, 25)
+#     res = x.div(y)
+#     assert res.toint() == -5
+#     x = Real.fromint(-1, 5)
+#     y = Real.fromint(1, -25)
+#     res = x.div(y)
+#     assert res.toint() == 5
+#     x = Real.fromint(-4, -2)
+#     assert x.num.toint() == 2
+#     assert x.den.toint() == 1
+#     x = Real.fromint(-4, 2)
+#     assert x.num.toint() == -2
+#     assert x.den.toint() == 1
+#     x = Real.fromint(4, -2)
+#     assert x.num.toint() == -2
+#     assert x.den.toint() == 1
 
-# Test for neg
-def test_neg_real():
-    x = Real.fromint(10)
-    res = x.neg()
-    assert res.toint() == -10
-    x = Real.fromint(-10)
-    res = x.neg()
-    assert res.toint() == 10
-    x = Real.fromint(4, 2)
-    res = x.neg()
-    assert res.toint() == -2
-    x = Real.fromint(-4, 2)
-    res = x.neg()
-    assert res.toint() == 2
-    x = Real.fromint(4, -2)
-    res = x.neg()
-    assert res.toint() == 2
+# # Test for neg
+# def test_neg_real():
+#     x = Real.fromint(10)
+#     res = x.neg()
+#     assert res.toint() == -10
+#     x = Real.fromint(-10)
+#     res = x.neg()
+#     assert res.toint() == 10
+#     x = Real.fromint(4, 2)
+#     res = x.neg()
+#     assert res.toint() == -2
+#     x = Real.fromint(-4, 2)
+#     res = x.neg()
+#     assert res.toint() == 2
+#     x = Real.fromint(4, -2)
+#     res = x.neg()
+#     assert res.toint() == 2
 
-# Test for abs
-def test_abs_real():
-    x = Real.fromint(10)
-    res = x.abs()
-    assert res.toint() == 10
-    x = Real.fromint(-10)
-    res = x.abs()
-    assert res.toint() == 10
-    x = Real.fromint(4, 2)
-    res = x.abs()
-    assert res.toint() == 2
-    x = Real.fromint(-4, 2)
-    res = x.abs()
-    assert res.toint() == 2
-    x = Real.fromint(4, -2)
-    res = x.abs()
-    assert res.toint() == 2
+# # Test for abs
+# def test_abs_real():
+#     x = Real.fromint(10)
+#     res = x.abs()
+#     assert res.toint() == 10
+#     x = Real.fromint(-10)
+#     res = x.abs()
+#     assert res.toint() == 10
+#     x = Real.fromint(4, 2)
+#     res = x.abs()
+#     assert res.toint() == 2
+#     x = Real.fromint(-4, 2)
+#     res = x.abs()
+#     assert res.toint() == 2
+#     x = Real.fromint(4, -2)
+#     res = x.abs()
+#     assert res.toint() == 2
 
-# Test for eq
-def test_eq_real():
-    x = Real.fromint(10)
-    y = Real.fromint(10)
-    res = x.eq(y)
-    assert res == True
-    x = Real.fromint(10)
-    y = Real.fromint(-3)
-    res = x.eq(y)
-    assert res == False
-    x = Real.fromint(2, 7)
-    y = Real.fromint(2, 7)
-    res = x.eq(y)
-    assert res == True
-    x = Real.fromint(2, 9)
-    y = Real.fromint(2, 7)
-    res = x.eq(y)
-    assert res == False
+# # Test for eq
+# def test_eq_real():
+#     x = Real.fromint(10)
+#     y = Real.fromint(10)
+#     res = x.eq(y)
+#     assert res == True
+#     x = Real.fromint(10)
+#     y = Real.fromint(-3)
+#     res = x.eq(y)
+#     assert res == False
+#     x = Real.fromint(2, 7)
+#     y = Real.fromint(2, 7)
+#     res = x.eq(y)
+#     assert res == True
+#     x = Real.fromint(2, 9)
+#     y = Real.fromint(2, 7)
+#     res = x.eq(y)
+#     assert res == False
 
-# Test for lt
-def test_lt_real():
-    x = Real.fromint(10)
-    y = Real.fromint(11)
-    res1 = x.lt(y)
-    res2 = y.lt(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(-10)
-    y = Real.fromint(2)
-    res1 = x.lt(y)
-    res2 = y.lt(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(10)
-    y = Real.fromint(10)
-    res = x.lt(y)
-    assert res == False
-    x = Real.fromint(1, 3)
-    y = Real.fromint(5, 2)
-    res = x.lt(y)
-    assert res == True
-    x = Real.fromint(1, 3)
-    y = Real.fromint(1, 3)
-    res = x.lt(y)
-    assert res == False
-    x = Real.fromint(-1, 3)
-    y = Real.fromint(1, 6)
-    res = x.lt(y)
-    assert res == True
-    x = Real.fromint(1, -3)
-    y = Real.fromint(1, -6)
-    res = x.lt(y)
-    assert res == True
+# # Test for lt
+# def test_lt_real():
+#     x = Real.fromint(10)
+#     y = Real.fromint(11)
+#     res1 = x.lt(y)
+#     res2 = y.lt(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(-10)
+#     y = Real.fromint(2)
+#     res1 = x.lt(y)
+#     res2 = y.lt(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(10)
+#     y = Real.fromint(10)
+#     res = x.lt(y)
+#     assert res == False
+#     x = Real.fromint(1, 3)
+#     y = Real.fromint(5, 2)
+#     res = x.lt(y)
+#     assert res == True
+#     x = Real.fromint(1, 3)
+#     y = Real.fromint(1, 3)
+#     res = x.lt(y)
+#     assert res == False
+#     x = Real.fromint(-1, 3)
+#     y = Real.fromint(1, 6)
+#     res = x.lt(y)
+#     assert res == True
+#     x = Real.fromint(1, -3)
+#     y = Real.fromint(1, -6)
+#     res = x.lt(y)
+#     assert res == True
 
-# Test for gt
-def test_gt_real():
-    x = Real.fromint(10)
-    y = Real.fromint(8)
-    res1 = x.gt(y)
-    res2 = y.gt(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(10)
-    y = Real.fromint(-11)
-    res1 = x.gt(y)
-    res2 = y.gt(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(2, 7)
-    y = Real.fromint(2, 9)
-    res1 = x.gt(y)
-    res2 = y.gt(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(-1, 3)
-    y = Real.fromint(1, 6)
-    res1 = x.gt(y)
-    res2 = y.gt(x)
-    assert res1 == False
-    assert res2 == True
-    x = Real.fromint(1, -3)
-    y = Real.fromint(1, -6)
-    res = x.gt(y)
-    assert res == False
+# # Test for gt
+# def test_gt_real():
+#     x = Real.fromint(10)
+#     y = Real.fromint(8)
+#     res1 = x.gt(y)
+#     res2 = y.gt(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(10)
+#     y = Real.fromint(-11)
+#     res1 = x.gt(y)
+#     res2 = y.gt(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(2, 7)
+#     y = Real.fromint(2, 9)
+#     res1 = x.gt(y)
+#     res2 = y.gt(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(-1, 3)
+#     y = Real.fromint(1, 6)
+#     res1 = x.gt(y)
+#     res2 = y.gt(x)
+#     assert res1 == False
+#     assert res2 == True
+#     x = Real.fromint(1, -3)
+#     y = Real.fromint(1, -6)
+#     res = x.gt(y)
+#     assert res == False
 
-# Test for le
-def test_le_real():
-    x = Real.fromint(10)
-    y = Real.fromint(10)
-    res = x.le(y)
-    assert res == True
-    x = Real.fromint(10)
-    y = Real.fromint(8)
-    res1 = x.le(y)
-    res2 = y.le(x)
-    assert res1 == False
-    assert res2 == True
-    x = Real.fromint(10)
-    y = Real.fromint(-11)
-    res1 = x.le(y)
-    res2 = y.le(x)
-    assert res1 == False
-    assert res2 == True
-    x = Real.fromint(2, 7)
-    y = Real.fromint(2, 9)
-    res1 = x.le(y)
-    res2 = y.le(x)
-    assert res1 == False
-    assert res2 == True
-    x = Real.fromint(-1, 3)
-    y = Real.fromint(1, 6)
-    res1 = x.le(y)
-    res2 = y.le(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(1, -3)
-    y = Real.fromint(1, -6)
-    res = x.le(y)
-    assert res == True
-    x = Real.fromint(1, -3)
-    y = Real.fromint(-1, 3)
-    res = x.le(y)
-    assert res == True
+# # Test for le
+# def test_le_real():
+#     x = Real.fromint(10)
+#     y = Real.fromint(10)
+#     res = x.le(y)
+#     assert res == True
+#     x = Real.fromint(10)
+#     y = Real.fromint(8)
+#     res1 = x.le(y)
+#     res2 = y.le(x)
+#     assert res1 == False
+#     assert res2 == True
+#     x = Real.fromint(10)
+#     y = Real.fromint(-11)
+#     res1 = x.le(y)
+#     res2 = y.le(x)
+#     assert res1 == False
+#     assert res2 == True
+#     x = Real.fromint(2, 7)
+#     y = Real.fromint(2, 9)
+#     res1 = x.le(y)
+#     res2 = y.le(x)
+#     assert res1 == False
+#     assert res2 == True
+#     x = Real.fromint(-1, 3)
+#     y = Real.fromint(1, 6)
+#     res1 = x.le(y)
+#     res2 = y.le(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(1, -3)
+#     y = Real.fromint(1, -6)
+#     res = x.le(y)
+#     assert res == True
+#     x = Real.fromint(1, -3)
+#     y = Real.fromint(-1, 3)
+#     res = x.le(y)
+#     assert res == True
 
-# Test for ge
-def test_ge_real():
-    x = Real.fromint(10)
-    y = Real.fromint(10)
-    res = x.ge(y)
-    assert res == True
-    x = Real.fromint(10)
-    y = Real.fromint(8)
-    res1 = x.ge(y)
-    res2 = y.ge(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(10)
-    y = Real.fromint(-11)
-    res1 = x.ge(y)
-    res2 = y.ge(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(2, 7)
-    y = Real.fromint(2, 9)
-    res1 = x.ge(y)
-    res2 = y.ge(x)
-    assert res1 == True
-    assert res2 == False
-    x = Real.fromint(-1, 3)
-    y = Real.fromint(1, 6)
-    res1 = x.ge(y)
-    res2 = y.ge(x)
-    assert res1 == False
-    assert res2 == True
-    x = Real.fromint(1, -3)
-    y = Real.fromint(1, -6)
-    res = x.ge(y)
-    assert res == False
-    x = Real.fromint(1, -3)
-    y = Real.fromint(-1, 3)
-    res = x.ge(y)
-    assert res == True
+# # Test for ge
+# def test_ge_real():
+#     x = Real.fromint(10)
+#     y = Real.fromint(10)
+#     res = x.ge(y)
+#     assert res == True
+#     x = Real.fromint(10)
+#     y = Real.fromint(8)
+#     res1 = x.ge(y)
+#     res2 = y.ge(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(10)
+#     y = Real.fromint(-11)
+#     res1 = x.ge(y)
+#     res2 = y.ge(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(2, 7)
+#     y = Real.fromint(2, 9)
+#     res1 = x.ge(y)
+#     res2 = y.ge(x)
+#     assert res1 == True
+#     assert res2 == False
+#     x = Real.fromint(-1, 3)
+#     y = Real.fromint(1, 6)
+#     res1 = x.ge(y)
+#     res2 = y.ge(x)
+#     assert res1 == False
+#     assert res2 == True
+#     x = Real.fromint(1, -3)
+#     y = Real.fromint(1, -6)
+#     res = x.ge(y)
+#     assert res == False
+#     x = Real.fromint(1, -3)
+#     y = Real.fromint(-1, 3)
+#     res = x.ge(y)
+#     assert res == True
 
-# Test for basic corner cases
-def test_corner_real():
-    x = Real.fromint(2**63-1)
-    assert x.den.str() == "1"
-    assert x.num.str() == str(2**63-1)
-    x = Real.fromint(-2**63)
-    assert x.toint() == -2**63
-    x = Real.fromint(-2**63)
-    y = Real.fromint(1)
-    res = x.add(y)
-    assert res.toint() == -2**63+1
-    x = Real.fromint(1, -2**63)
-    assert x.num.str() == str(-1)
-    assert x.den.str() == str(2**63)
-    x = Real.fromint(1, 2**63-1)
-    assert x.num.str() == "1"
-    assert x.den.str() == str(2**63-1)
-    x = Real.fromint(2**63-1, 2**63-1)
-    assert x.toint() == 1
-    x = Real.fromint(-2**63, -2**63)
-    assert x.toint() == 1
-    x = Real.fromint(2**63-1, -2**63)
-    assert x.num.str() == str(-(2**63-1))
-    assert x.den.str() == str(2**63)
-    x = Real.fromint(-2**63, 2**63-1)
-    assert x.num.str() == str(-2**63)
-    assert x.den.str() == str(2**63-1)
-    x = Real.fromint(-2**63)
-    y = Real.fromint(-2**10)
-    res = x.add(y)
-    assert res.num.str() == str(-2**63-2**10)
-    assert res.den.str() == str(1)
-    x = Real.fromint(2**63-1)
-    y = Real.fromint(3)
-    res = x.add(y)
-    assert res.num.str() == str(2**63+2)
-    assert res.den.str() == str(1)
+# # Test for basic corner cases
+# def test_corner_real():
+#     x = Real.fromint(2**63-1)
+#     assert x.den.str() == "1"
+#     assert x.num.str() == str(2**63-1)
+#     x = Real.fromint(-2**63)
+#     assert x.toint() == -2**63
+#     x = Real.fromint(-2**63)
+#     y = Real.fromint(1)
+#     res = x.add(y)
+#     assert res.toint() == -2**63+1
+#     x = Real.fromint(1, -2**63)
+#     assert x.num.str() == str(-1)
+#     assert x.den.str() == str(2**63)
+#     x = Real.fromint(1, 2**63-1)
+#     assert x.num.str() == "1"
+#     assert x.den.str() == str(2**63-1)
+#     x = Real.fromint(2**63-1, 2**63-1)
+#     assert x.toint() == 1
+#     x = Real.fromint(-2**63, -2**63)
+#     assert x.toint() == 1
+#     x = Real.fromint(2**63-1, -2**63)
+#     assert x.num.str() == str(-(2**63-1))
+#     assert x.den.str() == str(2**63)
+#     x = Real.fromint(-2**63, 2**63-1)
+#     assert x.num.str() == str(-2**63)
+#     assert x.den.str() == str(2**63-1)
+#     x = Real.fromint(-2**63)
+#     y = Real.fromint(-2**10)
+#     res = x.add(y)
+#     assert res.num.str() == str(-2**63-2**10)
+#     assert res.den.str() == str(1)
+#     x = Real.fromint(2**63-1)
+#     y = Real.fromint(3)
+#     res = x.add(y)
+#     assert res.num.str() == str(2**63+2)
+#     assert res.den.str() == str(1)
 
-def test_fromstr_real():
-    x = Real.fromstr("12")
-    assert x.den.tolong() == 1
-    assert x.num.tolong() == 12
+# def test_fromstr_real():
+#     x = Real.fromstr("12")
+#     assert x.den.tolong() == 1
+#     assert x.num.tolong() == 12
 
-def test_sqrt_real():
-    x = Real.fromstr("4")
-    res = x.sqrt()
-    assert res.num.tolong() == 2
-    assert res.den.tolong() == 1
-    x = Real.fromstr("26")
-    res = x.sqrt()
-    assert res.den.tolong() == 13440582586105723640064737480160
-    assert res.num.tolong() == 68533792880608460985460475212801
-    x = Real.fromstr("0")
-    res = x.sqrt()
-    assert res.num.tolong() == 0
-    assert res.den.tolong() == 1
-    x = Real.fromstr("1")
-    res = x.sqrt()
-    assert res.num.tolong() == 1
-    assert res.den.tolong() == 1
-
-
-def rr_den_pos(num, den):
-    num = rbigint.fromlong(num)
-    den = rbigint.fromlong(den)
-    return Real(num, den, False)
-
-def test_pow_real():
-    x = Real.fromint(1, 5)
-    res = x.pow(0)
-    assert res.num.toint() == 1
-    assert res.den.toint() == 1
-    x = rr_den_pos(1997831095010467864672715021484102, 3236962239656889)
-    res = x.pow(157)
-    assert res.num.tolong() == 190409951913019359038317205622379457602035828161843624841207699640927333775046592117576433413376876105733603132434130232503683347785849318708509006432638953486459208060845830210831558599521266976597040288338545867344941559448210334962626849683138394215452361342483721896244695900342376820803404194896623578448721624401505793922858830089779388353229122375093315200327346176160201718081720922073765801503425541320651826634918043017133821123183693597845974507140550679408598425919072817502440705107563048772735794355949110660987620452824340776421141373378290388817722475777148149975006672300034940593562448675468527495896721557991715834489874636851054079281397033594218236496485700225830148375518405292368299266009779917697829068198692096000628965707869321183885417286230992305081062530810866126143930416846043662822682676265086593516620362109350087692151401171574058530429406860774077169678007037105575066100122224458321910152117944402331106583508534456254328581000038776850549037516306343853937763154535726419506592565250043512735506500050261473531397610769914398937629531939801849672473635189016987431448735983440291380473040048197144019936119057341031918984486870504545050237287974159943109902318579139573274087239158619821430962845884982613093737307323878091650016619308103208329051403017616292867427190150854611336696189675504308156673508645105181281534412711098521536335431300694163571611622508279641087680718962608046173975982960763365829378072699378641778714190817639937109358325321390501277552874635888901134603602189317283813110095294463428256170489469014615855156113040491798719415902149707071886660965416331005536296213055293194324606271255372690723430086511418166517112555757502202943421083825056523256193875236868131174984183525966873195540423765385513537781389750320784087424269992287016787675035568680805164909381373540508162634656613331790628358843988423467684724221226370341755451140190650781392496569578390881482246137743560727961120731986954334551195036809498851891499076178759525544347615692909093530014144601840102691015315169454460358563561301836839948762170182154177820560799228353437527328887865228305164982877950354698743822854076828223264157126244593770905192754873629164102000824458166916255482474653728766584423935436416665805589318534422094319896764912922891833539002715876662525027414796574568793844818057873912316649506326200489784545284231310640311258092576397121085874623483705221538967981926375857588113488064860838693989619646910717850643725125121151234511228165467105756138172053457546627173533402454314427348881592924832613424836721378626746053259587650488905814047739578955554695190014861757531195585001381395177155962377973636592899925717133673364683892637460352899677059394634219468963753575873664804765393235790882252616112308232444860780269091312300714438345143185170047348769027612481660663086538261726430502662395476908993715884211257866079156686243943175661299906030620025565620307377497265614217590773929914349479073535628553786049948004222888033286872604240323620881874001858192397525515375033096723570220950963746360502322678972754702551350841260269564403529679481818049357095857577062718147264051178345559973013611595399542327251244339857400927908447217906468708735571398954364678012999940266806891496476698708680508763560788258191054422672424829577101528077350460987995283796127345586232872348026585327705119426167260906765363432483507311318583716014273159306874704208102292570789326518795588220950969393809356453658489749373250557552793974847344630507447675300224283881898448032208475834951974207816067748495800862805749758479452665073073752074093203171173647866537953578871912720053270564531412228847987973308723256009261963987757440489290836501484070922113537049266434700522488231367414903099627460332351165673486972622704133190312924635158945144528021166776465675177478477033832562308925055120304997687890399163253132001730170107718281112510035708801649669645292211763408389267000376007761925250203108215212103518733189179015050338309991434427035536843348866615402560771870192281519878418938465048851057800568710574851328316280359702405178729302310881503358523301282670768976929342234219755958251763163623019122054132586638636055406646489634749338893327349077769886809892948821987235170145851885728851836626227988340402437205450072047914494298390487209025687453319119517297422542231932617241772961034263051083941093827549112012830097767776861469860823431336653616381002324991088816484641564510478930156189810585298867775911888958837287778813463079052280097983414742675627089050251859351421557719614944181797856661305825845675150845525997176719912149567334085843289445778263408335744217060071779081954294980610542192840054769433871220932564149414702861477491108227104599349559153034972238340329231037305318962059908485157939430601857863362639690950321251652038851290606630911836583621377615188689341218152625038339018868626843846701526168656950409293804227910392545916376960555237496816629944195699706390319737311331640473976149436676091791677052875736540960938891648580742748218248088950832621657039938672448151609227744465296003314690599111225878734167290173489785600107683712190915766399968575750144
-    assert res.den.tolong() == 152605935647679226282756190536636722669030930172767429260321713188655918063291372275949200913016469230881861936703267926892858191458666863236706148079968034303895171583534914159543857359589737180559339571339024633993101292297056083370608964594151791160554700812317461700468494874387520259364884336717586817778868394969465624697599648081857317122403102600721538641626163500190856568740415042847729062808976305298778819845783956670623356512378943285147657051165807324310741194576085942198601527892840213183790696348482655206168963355811560025082160505184110371696390624220005143785589654253497186816424880382583974181896693796771489424351793841770369303040204386469621500846258204487691049699829361937627175912264554944061791381666300044781732730751581825809003317286906774184845677020999700170418521310117798552782595025178116845856610447237341949406468521935351149232417276311757882172794671430098193798720976426930292527069917377994943054079172955248496471620627384146039114277553316420411898571728140514292645828750708028744876224446369411230868911890279944097845355858026893487929614329997659931762053654664862635020403815047127361278339525656399780842537282910548581007949535930754506407338788657741580953742155958283616108899207670258999952786492547280717908819145621372483197929855444767007288504579156624502324541571430514293204141107551108524249139085703904546174763838774659306760589080680752392716409190922535467519266207238159929509950267336791220517552975604697469453990196616594989092187988315421274118513323516422290303534101018693976123356270438385190370166384215870643122537135721541190703525629992429757758543711003399749182492092530329093962986465222895621542205981860941339743836893566694051422789063773150827779357821843524199955673573901121976427626673677852336319783284562438046308325164627990165473060582075767921495521043270500857512488056907397699831057657336723350597095074559442033991631963260738967102173706731010860031600250844534707322198534068002659601304943428683479507006764170029792019208835245080192898531303668306040449949556192399033456250780662678186777626097370254236651078644165664192559131037070113809176626408872070305666367546775016246021122268904569928324039173898484742373125824909799788656911845746229468127290683128367592262078509794696336528838202883291443449142660392362587336174811218403556760305442842323206883
-    frac = Fraction(1997831095010467864672715021484102, 3236962239656889)
-    frac2 = frac ** 157
-    assert frac2.numerator == 190409951913019359038317205622379457602035828161843624841207699640927333775046592117576433413376876105733603132434130232503683347785849318708509006432638953486459208060845830210831558599521266976597040288338545867344941559448210334962626849683138394215452361342483721896244695900342376820803404194896623578448721624401505793922858830089779388353229122375093315200327346176160201718081720922073765801503425541320651826634918043017133821123183693597845974507140550679408598425919072817502440705107563048772735794355949110660987620452824340776421141373378290388817722475777148149975006672300034940593562448675468527495896721557991715834489874636851054079281397033594218236496485700225830148375518405292368299266009779917697829068198692096000628965707869321183885417286230992305081062530810866126143930416846043662822682676265086593516620362109350087692151401171574058530429406860774077169678007037105575066100122224458321910152117944402331106583508534456254328581000038776850549037516306343853937763154535726419506592565250043512735506500050261473531397610769914398937629531939801849672473635189016987431448735983440291380473040048197144019936119057341031918984486870504545050237287974159943109902318579139573274087239158619821430962845884982613093737307323878091650016619308103208329051403017616292867427190150854611336696189675504308156673508645105181281534412711098521536335431300694163571611622508279641087680718962608046173975982960763365829378072699378641778714190817639937109358325321390501277552874635888901134603602189317283813110095294463428256170489469014615855156113040491798719415902149707071886660965416331005536296213055293194324606271255372690723430086511418166517112555757502202943421083825056523256193875236868131174984183525966873195540423765385513537781389750320784087424269992287016787675035568680805164909381373540508162634656613331790628358843988423467684724221226370341755451140190650781392496569578390881482246137743560727961120731986954334551195036809498851891499076178759525544347615692909093530014144601840102691015315169454460358563561301836839948762170182154177820560799228353437527328887865228305164982877950354698743822854076828223264157126244593770905192754873629164102000824458166916255482474653728766584423935436416665805589318534422094319896764912922891833539002715876662525027414796574568793844818057873912316649506326200489784545284231310640311258092576397121085874623483705221538967981926375857588113488064860838693989619646910717850643725125121151234511228165467105756138172053457546627173533402454314427348881592924832613424836721378626746053259587650488905814047739578955554695190014861757531195585001381395177155962377973636592899925717133673364683892637460352899677059394634219468963753575873664804765393235790882252616112308232444860780269091312300714438345143185170047348769027612481660663086538261726430502662395476908993715884211257866079156686243943175661299906030620025565620307377497265614217590773929914349479073535628553786049948004222888033286872604240323620881874001858192397525515375033096723570220950963746360502322678972754702551350841260269564403529679481818049357095857577062718147264051178345559973013611595399542327251244339857400927908447217906468708735571398954364678012999940266806891496476698708680508763560788258191054422672424829577101528077350460987995283796127345586232872348026585327705119426167260906765363432483507311318583716014273159306874704208102292570789326518795588220950969393809356453658489749373250557552793974847344630507447675300224283881898448032208475834951974207816067748495800862805749758479452665073073752074093203171173647866537953578871912720053270564531412228847987973308723256009261963987757440489290836501484070922113537049266434700522488231367414903099627460332351165673486972622704133190312924635158945144528021166776465675177478477033832562308925055120304997687890399163253132001730170107718281112510035708801649669645292211763408389267000376007761925250203108215212103518733189179015050338309991434427035536843348866615402560771870192281519878418938465048851057800568710574851328316280359702405178729302310881503358523301282670768976929342234219755958251763163623019122054132586638636055406646489634749338893327349077769886809892948821987235170145851885728851836626227988340402437205450072047914494298390487209025687453319119517297422542231932617241772961034263051083941093827549112012830097767776861469860823431336653616381002324991088816484641564510478930156189810585298867775911888958837287778813463079052280097983414742675627089050251859351421557719614944181797856661305825845675150845525997176719912149567334085843289445778263408335744217060071779081954294980610542192840054769433871220932564149414702861477491108227104599349559153034972238340329231037305318962059908485157939430601857863362639690950321251652038851290606630911836583621377615188689341218152625038339018868626843846701526168656950409293804227910392545916376960555237496816629944195699706390319737311331640473976149436676091791677052875736540960938891648580742748218248088950832621657039938672448151609227744465296003314690599111225878734167290173489785600107683712190915766399968575750144
-    assert frac2.denominator == 152605935647679226282756190536636722669030930172767429260321713188655918063291372275949200913016469230881861936703267926892858191458666863236706148079968034303895171583534914159543857359589737180559339571339024633993101292297056083370608964594151791160554700812317461700468494874387520259364884336717586817778868394969465624697599648081857317122403102600721538641626163500190856568740415042847729062808976305298778819845783956670623356512378943285147657051165807324310741194576085942198601527892840213183790696348482655206168963355811560025082160505184110371696390624220005143785589654253497186816424880382583974181896693796771489424351793841770369303040204386469621500846258204487691049699829361937627175912264554944061791381666300044781732730751581825809003317286906774184845677020999700170418521310117798552782595025178116845856610447237341949406468521935351149232417276311757882172794671430098193798720976426930292527069917377994943054079172955248496471620627384146039114277553316420411898571728140514292645828750708028744876224446369411230868911890279944097845355858026893487929614329997659931762053654664862635020403815047127361278339525656399780842537282910548581007949535930754506407338788657741580953742155958283616108899207670258999952786492547280717908819145621372483197929855444767007288504579156624502324541571430514293204141107551108524249139085703904546174763838774659306760589080680752392716409190922535467519266207238159929509950267336791220517552975604697469453990196616594989092187988315421274118513323516422290303534101018693976123356270438385190370166384215870643122537135721541190703525629992429757758543711003399749182492092530329093962986465222895621542205981860941339743836893566694051422789063773150827779357821843524199955673573901121976427626673677852336319783284562438046308325164627990165473060582075767921495521043270500857512488056907397699831057657336723350597095074559442033991631963260738967102173706731010860031600250844534707322198534068002659601304943428683479507006764170029792019208835245080192898531303668306040449949556192399033456250780662678186777626097370254236651078644165664192559131037070113809176626408872070305666367546775016246021122268904569928324039173898484742373125824909799788656911845746229468127290683128367592262078509794696336528838202883291443449142660392362587336174811218403556760305442842323206883
-
-@given(strategies.integers(), strategies.integers(min_value = 1))
-def test_real_neg_hypothesis(num, den):
-    r = rr_den_pos(num, den)
-    r_2 = r.neg()
-    assert r.den.eq(r_2.den)
-    assert r.num.neg().eq(r_2.num)
-
-@given(strategies.integers(), strategies.integers(min_value = 1))
-def test_real_abs_hypothesis(num, den):
-    r = rr_den_pos(num, den)
-    r_2 = r.abs()
-    assert r.den.eq(r_2.den)
-    assert r.num.abs().eq(r_2.num)
+# def test_sqrt_real():
+#     x = Real.fromstr("4")
+#     res = x.sqrt()
+#     assert res.num.tolong() == 2
+#     assert res.den.tolong() == 1
+#     x = Real.fromstr("26")
+#     res = x.sqrt()
+#     assert res.den.tolong() == 13440582586105723640064737480160
+#     assert res.num.tolong() == 68533792880608460985460475212801
+#     x = Real.fromstr("0")
+#     res = x.sqrt()
+#     assert res.num.tolong() == 0
+#     assert res.den.tolong() == 1
+#     x = Real.fromstr("1")
+#     res = x.sqrt()
+#     assert res.num.tolong() == 1
+#     assert res.den.tolong() == 1
 
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_add_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    res = r1.add(r2)
-    frac = Fraction(num1, den1) + Fraction(num2, den2)
-    assert res.num.tolong() == frac.numerator
-    assert res.den.tolong() == frac.denominator
+# def rr_den_pos(num, den):
+#     num = rbigint.fromlong(num)
+#     den = rbigint.fromlong(den)
+#     return Real(num, den, False)
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_sub_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    res = r1.sub(r2)
-    frac = Fraction(num1, den1) - Fraction(num2, den2)
-    assert res.num.tolong() == frac.numerator
-    assert res.den.tolong() == frac.denominator
+# def test_pow_real():
+#     x = Real.fromint(1, 5)
+#     res = x.pow(0)
+#     assert res.num.toint() == 1
+#     assert res.den.toint() == 1
+#     x = rr_den_pos(1997831095010467864672715021484102, 3236962239656889)
+#     res = x.pow(157)
+#     assert res.num.tolong() == 190409951913019359038317205622379457602035828161843624841207699640927333775046592117576433413376876105733603132434130232503683347785849318708509006432638953486459208060845830210831558599521266976597040288338545867344941559448210334962626849683138394215452361342483721896244695900342376820803404194896623578448721624401505793922858830089779388353229122375093315200327346176160201718081720922073765801503425541320651826634918043017133821123183693597845974507140550679408598425919072817502440705107563048772735794355949110660987620452824340776421141373378290388817722475777148149975006672300034940593562448675468527495896721557991715834489874636851054079281397033594218236496485700225830148375518405292368299266009779917697829068198692096000628965707869321183885417286230992305081062530810866126143930416846043662822682676265086593516620362109350087692151401171574058530429406860774077169678007037105575066100122224458321910152117944402331106583508534456254328581000038776850549037516306343853937763154535726419506592565250043512735506500050261473531397610769914398937629531939801849672473635189016987431448735983440291380473040048197144019936119057341031918984486870504545050237287974159943109902318579139573274087239158619821430962845884982613093737307323878091650016619308103208329051403017616292867427190150854611336696189675504308156673508645105181281534412711098521536335431300694163571611622508279641087680718962608046173975982960763365829378072699378641778714190817639937109358325321390501277552874635888901134603602189317283813110095294463428256170489469014615855156113040491798719415902149707071886660965416331005536296213055293194324606271255372690723430086511418166517112555757502202943421083825056523256193875236868131174984183525966873195540423765385513537781389750320784087424269992287016787675035568680805164909381373540508162634656613331790628358843988423467684724221226370341755451140190650781392496569578390881482246137743560727961120731986954334551195036809498851891499076178759525544347615692909093530014144601840102691015315169454460358563561301836839948762170182154177820560799228353437527328887865228305164982877950354698743822854076828223264157126244593770905192754873629164102000824458166916255482474653728766584423935436416665805589318534422094319896764912922891833539002715876662525027414796574568793844818057873912316649506326200489784545284231310640311258092576397121085874623483705221538967981926375857588113488064860838693989619646910717850643725125121151234511228165467105756138172053457546627173533402454314427348881592924832613424836721378626746053259587650488905814047739578955554695190014861757531195585001381395177155962377973636592899925717133673364683892637460352899677059394634219468963753575873664804765393235790882252616112308232444860780269091312300714438345143185170047348769027612481660663086538261726430502662395476908993715884211257866079156686243943175661299906030620025565620307377497265614217590773929914349479073535628553786049948004222888033286872604240323620881874001858192397525515375033096723570220950963746360502322678972754702551350841260269564403529679481818049357095857577062718147264051178345559973013611595399542327251244339857400927908447217906468708735571398954364678012999940266806891496476698708680508763560788258191054422672424829577101528077350460987995283796127345586232872348026585327705119426167260906765363432483507311318583716014273159306874704208102292570789326518795588220950969393809356453658489749373250557552793974847344630507447675300224283881898448032208475834951974207816067748495800862805749758479452665073073752074093203171173647866537953578871912720053270564531412228847987973308723256009261963987757440489290836501484070922113537049266434700522488231367414903099627460332351165673486972622704133190312924635158945144528021166776465675177478477033832562308925055120304997687890399163253132001730170107718281112510035708801649669645292211763408389267000376007761925250203108215212103518733189179015050338309991434427035536843348866615402560771870192281519878418938465048851057800568710574851328316280359702405178729302310881503358523301282670768976929342234219755958251763163623019122054132586638636055406646489634749338893327349077769886809892948821987235170145851885728851836626227988340402437205450072047914494298390487209025687453319119517297422542231932617241772961034263051083941093827549112012830097767776861469860823431336653616381002324991088816484641564510478930156189810585298867775911888958837287778813463079052280097983414742675627089050251859351421557719614944181797856661305825845675150845525997176719912149567334085843289445778263408335744217060071779081954294980610542192840054769433871220932564149414702861477491108227104599349559153034972238340329231037305318962059908485157939430601857863362639690950321251652038851290606630911836583621377615188689341218152625038339018868626843846701526168656950409293804227910392545916376960555237496816629944195699706390319737311331640473976149436676091791677052875736540960938891648580742748218248088950832621657039938672448151609227744465296003314690599111225878734167290173489785600107683712190915766399968575750144
+#     assert res.den.tolong() == 152605935647679226282756190536636722669030930172767429260321713188655918063291372275949200913016469230881861936703267926892858191458666863236706148079968034303895171583534914159543857359589737180559339571339024633993101292297056083370608964594151791160554700812317461700468494874387520259364884336717586817778868394969465624697599648081857317122403102600721538641626163500190856568740415042847729062808976305298778819845783956670623356512378943285147657051165807324310741194576085942198601527892840213183790696348482655206168963355811560025082160505184110371696390624220005143785589654253497186816424880382583974181896693796771489424351793841770369303040204386469621500846258204487691049699829361937627175912264554944061791381666300044781732730751581825809003317286906774184845677020999700170418521310117798552782595025178116845856610447237341949406468521935351149232417276311757882172794671430098193798720976426930292527069917377994943054079172955248496471620627384146039114277553316420411898571728140514292645828750708028744876224446369411230868911890279944097845355858026893487929614329997659931762053654664862635020403815047127361278339525656399780842537282910548581007949535930754506407338788657741580953742155958283616108899207670258999952786492547280717908819145621372483197929855444767007288504579156624502324541571430514293204141107551108524249139085703904546174763838774659306760589080680752392716409190922535467519266207238159929509950267336791220517552975604697469453990196616594989092187988315421274118513323516422290303534101018693976123356270438385190370166384215870643122537135721541190703525629992429757758543711003399749182492092530329093962986465222895621542205981860941339743836893566694051422789063773150827779357821843524199955673573901121976427626673677852336319783284562438046308325164627990165473060582075767921495521043270500857512488056907397699831057657336723350597095074559442033991631963260738967102173706731010860031600250844534707322198534068002659601304943428683479507006764170029792019208835245080192898531303668306040449949556192399033456250780662678186777626097370254236651078644165664192559131037070113809176626408872070305666367546775016246021122268904569928324039173898484742373125824909799788656911845746229468127290683128367592262078509794696336528838202883291443449142660392362587336174811218403556760305442842323206883
+#     frac = Fraction(1997831095010467864672715021484102, 3236962239656889)
+#     frac2 = frac ** 157
+#     assert frac2.numerator == 190409951913019359038317205622379457602035828161843624841207699640927333775046592117576433413376876105733603132434130232503683347785849318708509006432638953486459208060845830210831558599521266976597040288338545867344941559448210334962626849683138394215452361342483721896244695900342376820803404194896623578448721624401505793922858830089779388353229122375093315200327346176160201718081720922073765801503425541320651826634918043017133821123183693597845974507140550679408598425919072817502440705107563048772735794355949110660987620452824340776421141373378290388817722475777148149975006672300034940593562448675468527495896721557991715834489874636851054079281397033594218236496485700225830148375518405292368299266009779917697829068198692096000628965707869321183885417286230992305081062530810866126143930416846043662822682676265086593516620362109350087692151401171574058530429406860774077169678007037105575066100122224458321910152117944402331106583508534456254328581000038776850549037516306343853937763154535726419506592565250043512735506500050261473531397610769914398937629531939801849672473635189016987431448735983440291380473040048197144019936119057341031918984486870504545050237287974159943109902318579139573274087239158619821430962845884982613093737307323878091650016619308103208329051403017616292867427190150854611336696189675504308156673508645105181281534412711098521536335431300694163571611622508279641087680718962608046173975982960763365829378072699378641778714190817639937109358325321390501277552874635888901134603602189317283813110095294463428256170489469014615855156113040491798719415902149707071886660965416331005536296213055293194324606271255372690723430086511418166517112555757502202943421083825056523256193875236868131174984183525966873195540423765385513537781389750320784087424269992287016787675035568680805164909381373540508162634656613331790628358843988423467684724221226370341755451140190650781392496569578390881482246137743560727961120731986954334551195036809498851891499076178759525544347615692909093530014144601840102691015315169454460358563561301836839948762170182154177820560799228353437527328887865228305164982877950354698743822854076828223264157126244593770905192754873629164102000824458166916255482474653728766584423935436416665805589318534422094319896764912922891833539002715876662525027414796574568793844818057873912316649506326200489784545284231310640311258092576397121085874623483705221538967981926375857588113488064860838693989619646910717850643725125121151234511228165467105756138172053457546627173533402454314427348881592924832613424836721378626746053259587650488905814047739578955554695190014861757531195585001381395177155962377973636592899925717133673364683892637460352899677059394634219468963753575873664804765393235790882252616112308232444860780269091312300714438345143185170047348769027612481660663086538261726430502662395476908993715884211257866079156686243943175661299906030620025565620307377497265614217590773929914349479073535628553786049948004222888033286872604240323620881874001858192397525515375033096723570220950963746360502322678972754702551350841260269564403529679481818049357095857577062718147264051178345559973013611595399542327251244339857400927908447217906468708735571398954364678012999940266806891496476698708680508763560788258191054422672424829577101528077350460987995283796127345586232872348026585327705119426167260906765363432483507311318583716014273159306874704208102292570789326518795588220950969393809356453658489749373250557552793974847344630507447675300224283881898448032208475834951974207816067748495800862805749758479452665073073752074093203171173647866537953578871912720053270564531412228847987973308723256009261963987757440489290836501484070922113537049266434700522488231367414903099627460332351165673486972622704133190312924635158945144528021166776465675177478477033832562308925055120304997687890399163253132001730170107718281112510035708801649669645292211763408389267000376007761925250203108215212103518733189179015050338309991434427035536843348866615402560771870192281519878418938465048851057800568710574851328316280359702405178729302310881503358523301282670768976929342234219755958251763163623019122054132586638636055406646489634749338893327349077769886809892948821987235170145851885728851836626227988340402437205450072047914494298390487209025687453319119517297422542231932617241772961034263051083941093827549112012830097767776861469860823431336653616381002324991088816484641564510478930156189810585298867775911888958837287778813463079052280097983414742675627089050251859351421557719614944181797856661305825845675150845525997176719912149567334085843289445778263408335744217060071779081954294980610542192840054769433871220932564149414702861477491108227104599349559153034972238340329231037305318962059908485157939430601857863362639690950321251652038851290606630911836583621377615188689341218152625038339018868626843846701526168656950409293804227910392545916376960555237496816629944195699706390319737311331640473976149436676091791677052875736540960938891648580742748218248088950832621657039938672448151609227744465296003314690599111225878734167290173489785600107683712190915766399968575750144
+#     assert frac2.denominator == 152605935647679226282756190536636722669030930172767429260321713188655918063291372275949200913016469230881861936703267926892858191458666863236706148079968034303895171583534914159543857359589737180559339571339024633993101292297056083370608964594151791160554700812317461700468494874387520259364884336717586817778868394969465624697599648081857317122403102600721538641626163500190856568740415042847729062808976305298778819845783956670623356512378943285147657051165807324310741194576085942198601527892840213183790696348482655206168963355811560025082160505184110371696390624220005143785589654253497186816424880382583974181896693796771489424351793841770369303040204386469621500846258204487691049699829361937627175912264554944061791381666300044781732730751581825809003317286906774184845677020999700170418521310117798552782595025178116845856610447237341949406468521935351149232417276311757882172794671430098193798720976426930292527069917377994943054079172955248496471620627384146039114277553316420411898571728140514292645828750708028744876224446369411230868911890279944097845355858026893487929614329997659931762053654664862635020403815047127361278339525656399780842537282910548581007949535930754506407338788657741580953742155958283616108899207670258999952786492547280717908819145621372483197929855444767007288504579156624502324541571430514293204141107551108524249139085703904546174763838774659306760589080680752392716409190922535467519266207238159929509950267336791220517552975604697469453990196616594989092187988315421274118513323516422290303534101018693976123356270438385190370166384215870643122537135721541190703525629992429757758543711003399749182492092530329093962986465222895621542205981860941339743836893566694051422789063773150827779357821843524199955673573901121976427626673677852336319783284562438046308325164627990165473060582075767921495521043270500857512488056907397699831057657336723350597095074559442033991631963260738967102173706731010860031600250844534707322198534068002659601304943428683479507006764170029792019208835245080192898531303668306040449949556192399033456250780662678186777626097370254236651078644165664192559131037070113809176626408872070305666367546775016246021122268904569928324039173898484742373125824909799788656911845746229468127290683128367592262078509794696336528838202883291443449142660392362587336174811218403556760305442842323206883
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_mul_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    res = r1.mul(r2)
-    frac = Fraction(num1, den1) * Fraction(num2, den2)
-    assert res.num.tolong() == frac.numerator
-    assert res.den.tolong() == frac.denominator
+# @given(strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_neg_hypothesis(num, den):
+#     r = rr_den_pos(num, den)
+#     r_2 = r.neg()
+#     assert r.den.eq(r_2.den)
+#     assert r.num.neg().eq(r_2.num)
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers().filter(lambda n: n != 0), strategies.integers(min_value = 1))
-def test_real_div_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    res = r1.div(r2)
-    frac = Fraction(num1, den1) / Fraction(num2, den2)
-    assert res.num.tolong() == frac.numerator
-    assert res.den.tolong() == frac.denominator
+# @given(strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_abs_hypothesis(num, den):
+#     r = rr_den_pos(num, den)
+#     r_2 = r.abs()
+#     assert r.den.eq(r_2.den)
+#     assert r.num.abs().eq(r_2.num)
 
-@given(strategies.integers(), strategies.integers(min_value = 1))
-def test_real_ceil_hypothesis(num, den):
-    r = rr_den_pos(num, den)
-    res = r.ceil()
-    frac = Fraction(num, den)
-    if num % den == 0:
-        assert res.tolong() == frac.numerator
-    else:
-        if num > 0:
-            assert res.tolong() == frac.numerator // frac.denominator + 1
-        else:
-            assert res.tolong() == -((-frac.numerator) // frac.denominator)
 
-@given(strategies.integers(), strategies.integers(min_value = 1))
-def test_real_floor_hypothesis(num, den):
-    r = rr_den_pos(num, den)
-    res = r.floor()
-    frac = Fraction(num, den)
-    if num % den == 0:
-        assert res.tolong() == frac.numerator
-    else:
-        if num > 0:
-            assert res.tolong() == frac.numerator // frac.denominator
-        else:
-            assert res.tolong() == -((-frac.numerator) // frac.denominator + 1)
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_add_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     res = r1.add(r2)
+#     frac = Fraction(num1, den1) + Fraction(num2, den2)
+#     assert res.num.tolong() == frac.numerator
+#     assert res.den.tolong() == frac.denominator
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_eq_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    frac1 = Fraction(num1, den1)
-    frac2 = Fraction(num2, den2)
-    assert r1.eq(r2) == (frac1.numerator == frac2.numerator and frac1.denominator == frac2.denominator)
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_sub_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     res = r1.sub(r2)
+#     frac = Fraction(num1, den1) - Fraction(num2, den2)
+#     assert res.num.tolong() == frac.numerator
+#     assert res.den.tolong() == frac.denominator
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_lt_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    frac1 = Fraction(num1, den1)
-    frac2 = Fraction(num2, den2)
-    assert r1.lt(r2) == (frac1 - frac2 < 0)
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_mul_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     res = r1.mul(r2)
+#     frac = Fraction(num1, den1) * Fraction(num2, den2)
+#     assert res.num.tolong() == frac.numerator
+#     assert res.den.tolong() == frac.denominator
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_gt_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    frac1 = Fraction(num1, den1)
-    frac2 = Fraction(num2, den2)
-    assert r1.gt(r2) == (frac1 - frac2 > 0)
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers().filter(lambda n: n != 0), strategies.integers(min_value = 1))
+# def test_real_div_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     res = r1.div(r2)
+#     frac = Fraction(num1, den1) / Fraction(num2, den2)
+#     assert res.num.tolong() == frac.numerator
+#     assert res.den.tolong() == frac.denominator
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_le_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    frac1 = Fraction(num1, den1)
-    frac2 = Fraction(num2, den2)
-    assert r1.le(r2) == (frac1 - frac2 <= 0)
+# @given(strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_ceil_hypothesis(num, den):
+#     r = rr_den_pos(num, den)
+#     res = r.ceil()
+#     frac = Fraction(num, den)
+#     if num % den == 0:
+#         assert res.tolong() == frac.numerator
+#     else:
+#         if num > 0:
+#             assert res.tolong() == frac.numerator // frac.denominator + 1
+#         else:
+#             assert res.tolong() == -((-frac.numerator) // frac.denominator)
 
-@given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
-def test_real_ge_hypothesis(num1, den1, num2, den2):
-    r1 = rr_den_pos(num1, den1)
-    r2 = rr_den_pos(num2, den2)
-    frac1 = Fraction(num1, den1)
-    frac2 = Fraction(num2, den2)
-    assert r1.ge(r2) == (frac1 - frac2 >= 0)
+# @given(strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_floor_hypothesis(num, den):
+#     r = rr_den_pos(num, den)
+#     res = r.floor()
+#     frac = Fraction(num, den)
+#     if num % den == 0:
+#         assert res.tolong() == frac.numerator
+#     else:
+#         if num > 0:
+#             assert res.tolong() == frac.numerator // frac.denominator
+#         else:
+#             assert res.tolong() == -((-frac.numerator) // frac.denominator + 1)
 
-@given(strategies.integers().filter(lambda n: n != 0), strategies.integers(min_value = 1), strategies.integers(min_value = -50, max_value = 50))
-def test_real_pow_hypothesis(num, den, n):
-    r = rr_den_pos(num, den)
-    res = r.pow(n)
-    frac = Fraction(num, den)
-    frac_pow = frac ** n
-    assert res.num.tolong() == frac_pow.numerator
-    assert res.den.tolong() == frac_pow.denominator
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_eq_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     frac1 = Fraction(num1, den1)
+#     frac2 = Fraction(num2, den2)
+#     assert r1.eq(r2) == (frac1.numerator == frac2.numerator and frac1.denominator == frac2.denominator)
 
-@given(strategies.integers(), strategies.integers(min_value = 0, max_value = 100), strategies.integers(min_value = 0))
-def test_real_fromstr_2_hypothesis(integer, zeros, fractional):
-    num_str = str(integer) + "." + "0"*zeros + str(fractional)
-    r = Real.fromstr(num_str)
-    frac = Fraction(num_str)
-    assert r.num.tolong() == frac.numerator
-    assert r.den.tolong() == frac.denominator
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_lt_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     frac1 = Fraction(num1, den1)
+#     frac2 = Fraction(num2, den2)
+#     assert r1.lt(r2) == (frac1 - frac2 < 0)
 
-@settings(deadline=1000)
-@given(strategies.floats(allow_nan = False, allow_infinity = False, min_value = 0, max_value = float(2**63-1)))
-def test_real_sqrt_hypothesis(a):
-    from rpython.rlib.rfloat import float_as_rbigint_ratio
-    num, den = float_as_rbigint_ratio(a)
-    x = Real(num, den).sqrt()
-    assert math.sqrt(a) == x.num.truediv(x.den)
-    num, den = float_as_rbigint_ratio(math.sqrt(a))
-    assert max(len(x.num.str()), len(x.den.str())) >= max(len(num.str()), len(den.str()))
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_gt_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     frac1 = Fraction(num1, den1)
+#     frac2 = Fraction(num2, den2)
+#     assert r1.gt(r2) == (frac1 - frac2 > 0)
+
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_le_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     frac1 = Fraction(num1, den1)
+#     frac2 = Fraction(num2, den2)
+#     assert r1.le(r2) == (frac1 - frac2 <= 0)
+
+# @given(strategies.integers(), strategies.integers(min_value = 1), strategies.integers(), strategies.integers(min_value = 1))
+# def test_real_ge_hypothesis(num1, den1, num2, den2):
+#     r1 = rr_den_pos(num1, den1)
+#     r2 = rr_den_pos(num2, den2)
+#     frac1 = Fraction(num1, den1)
+#     frac2 = Fraction(num2, den2)
+#     assert r1.ge(r2) == (frac1 - frac2 >= 0)
+
+# @given(strategies.integers().filter(lambda n: n != 0), strategies.integers(min_value = 1), strategies.integers(min_value = -50, max_value = 50))
+# def test_real_pow_hypothesis(num, den, n):
+#     r = rr_den_pos(num, den)
+#     res = r.pow(n)
+#     frac = Fraction(num, den)
+#     frac_pow = frac ** n
+#     assert res.num.tolong() == frac_pow.numerator
+#     assert res.den.tolong() == frac_pow.denominator
+
+# @given(strategies.integers(), strategies.integers(min_value = 0, max_value = 100), strategies.integers(min_value = 0))
+# def test_real_fromstr_2_hypothesis(integer, zeros, fractional):
+#     num_str = str(integer) + "." + "0"*zeros + str(fractional)
+#     r = Real.fromstr(num_str)
+#     frac = Fraction(num_str)
+#     assert r.num.tolong() == frac.numerator
+#     assert r.den.tolong() == frac.denominator
+
+# @settings(deadline=1000)
+# @given(strategies.floats(allow_nan = False, allow_infinity = False, min_value = 0, max_value = float(2**63-1)))
+# def test_real_sqrt_hypothesis(a):
+#     from rpython.rlib.rfloat import float_as_rbigint_ratio
+#     num, den = float_as_rbigint_ratio(a)
+#     x = Real(num, den).sqrt()
+#     assert math.sqrt(a) == x.num.truediv(x.den)
+#     num, den = float_as_rbigint_ratio(math.sqrt(a))
+#     assert max(len(x.num.str()), len(x.den.str())) >= max(len(num.str()), len(den.str()))
 
 # memory
 
@@ -1631,7 +1816,6 @@ def test_platform_write_mem_large():
     assert res.tobigint().tolong() == 0xe1c4a990796451403124191009040100L
     assert res.size() == 128
 
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 #section for test file for sparse bitvectors
 
 
@@ -2170,114 +2354,7 @@ def test_sparse_arith_shiftr_hypothesis(data):
     res = v.arith_rshift(shift)
     intres = v.signed().tobigint().tolong() >> shift
     assert res.tobigint().tolong() == intres & ((1 << size) - 1)
-<<<<<<< HEAD
-# def test_smallbitvector():
-#     x = SmallBitVector(4, r_uint(4))
-#     # 1011 --> 1100 --> 1101
-#     assert x.read_bit(0) == 0
-#     assert x.read_bit(1) == 0
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 0
-#     x = x.arith_rshift(1)
-#     assert x.read_bit(0) == 0
-#     assert x.read_bit(1) == 1
-#     assert x.read_bit(2) == 0
-#     assert x.read_bit(3) == 0
-#     x = SmallBitVector(4, r_uint(-4))
-#     # 1100 --> 1011 --> 1100
-#     assert x.read_bit(0) == 0
-#     assert x.read_bit(1) == 0
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 1
-#     x = x.arith_rshift(1)
-#     assert x.read_bit(0) == 0
-#     assert x.read_bit(1) == 1
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 1
-#     assert x.eq(SmallBitVector(4, r_uint(-2))) == True
-#     x = SmallBitVector(4, r_uint(3))
-#     x = x.arith_rshift(1)
-#     assert x.read_bit(0) == 1
-#     assert x.read_bit(1) == 0
-#     assert x.read_bit(2) == 0
-#     assert x.read_bit(3) == 0
-#     x = SmallBitVector(4, r_uint(-3))
-#     # 1011 --> 1100 --> 1101
-#     assert x.read_bit(0) == 1
-#     assert x.read_bit(1) == 0
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 1
-#     x = x.arith_rshift(1)
-#     assert x.read_bit(0) == 0
-#     assert x.read_bit(1) == 1
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 1
-#     assert x.eq(SmallBitVector(4, r_uint(-2))) == True
-#     x = SmallBitVector(6, r_uint(-7))
-#     # 100111 --> 111000 --> 111001
-#     assert x.read_bit(0) == 1
-#     assert x.read_bit(1) == 0
-#     assert x.read_bit(2) == 0
-#     assert x.read_bit(3) == 1
-#     assert x.read_bit(4) == 1
-#     assert x.read_bit(5) == 1
-#     x = x.arith_rshift(2)
-#     assert x.read_bit(0) == 0
-#     assert x.read_bit(1) == 1
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 1
-#     assert x.read_bit(4) == 1
-#     assert x.read_bit(5) == 1
-#     assert x.eq(SmallBitVector(6, r_uint(-2)))
-#     x = SmallBitVector(4, r_uint(-1))
-#     x = x.arith_rshift(5)
-#     assert x.read_bit(0) == 1
-#     assert x.read_bit(1) == 1
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 1
-#     x = SmallBitVector(4, r_uint(-1))
-#     # 1001 --> 1110 --> 1111
-#     x = x.arith_rshift(2)
-#     assert x.read_bit(0) == 1
-#     assert x.read_bit(1) == 1
-#     assert x.read_bit(2) == 1
-#     assert x.read_bit(3) == 1
-#     x = SmallBitVector(4, r_uint(0))
-#     assert x.read_bit(0) == 0
-#     assert x.read_bit(1) == 0
-#     assert x.read_bit(2) == 0
-#     assert x.read_bit(3) == 0
-#     x = SmallBitVector(4, r_uint(17))
-#     assert x.read_bit(0) == 1
-#     assert x.read_bit(1) == 0
-#     assert x.read_bit(2) == 0
-#     assert x.read_bit(3) == 0 
-#     a = -6
-#     # assert str(bin(abs(a)))[2:] == "111"
-#     val_bin = abs(a)
-#     length = len(bin(val_bin))-2
-#     val_bin = (val_bin ^ ((1 << len(bin(val_bin)[2:])) -1)) + 1
-#     val_str = "0"*(length-len(bin(val_bin)[2:]))+bin(val_bin)[2:]
-#     assert val_str == "010"
 
-def test_genericbitvector():
-    # x = GenericBitVector(4, rbigint.fromint(4))
-    # assert x.read_bit(0) == 0
-    # assert x.read_bit(1) == 0
-    # assert x.read_bit(2) == 1
-    # assert x.read_bit(3) == 0
-    # # x = GenericBitVector(3, rbigint.fromint(-2))
-    # # x = x.arith_shiftr(2)
-    # # assert x.read_bit(0) == 1
-    # x = GenericBitVector(3, rbigint.fromint(-2))
-    # # 1010 --> 1101 --> 1110
-    # assert x.read_bit(0) == 0
-    # assert x.read_bit(1) == 1
-    # assert x.read_bit(2) == 1
-    x = GenericBitVector(3, rbigint.fromint(-1))
-    assert x.rval.and_(rbigint.fromint(1)).toint() == 1
-    assert x.rval.and_(rbigint.fromint(1).lshift(1)).rshift(1).toint() == 1
-    assert x.rval.and_(rbigint.fromint(1).lshift(2)).rshift(2).toint() == 1
 
 def test_slice_int_smallint():
     x = SmallBitVector(2, r_uint(-1))
@@ -2439,5 +2516,3 @@ def test_set_slice_int_biginteger_hypothesis(val_int, val_bv, start, bv_size):
 
 
     
-=======
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285

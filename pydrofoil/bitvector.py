@@ -193,7 +193,7 @@ class SmallBitVector(BitVectorWithSize):
         return from_bigint(self.size(), self.rbigint_mask(self.size(), self.tobigint().sub(i.tobigint())))
 
     def print_bits(self):
-        print self.__repr__()
+        print(self.__repr__())
 
     def lshift(self, i):
         assert i >= 0
@@ -241,21 +241,12 @@ class SmallBitVector(BitVectorWithSize):
 
     def subrange(self, n, m):
         assert 0 <= m <= n < self.size()
-<<<<<<< HEAD
         width = n - m + 1
         return SmallBitVector(width, self.subrange_unwrapped_res(n, m))
 
     def subrange_unwrapped_res(self, n, m):
         assert 0 <= m <= n < self.size()
         width = n - m + 1
-=======
-        width = n - m + 1
-        return SmallBitVector(width, self.subrange_unwrapped_res(n, m))
-
-    def subrange_unwrapped_res(self, n, m):
-        assert 0 <= m <= n < self.size()
-        width = n - m + 1
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
         return ruint_mask(width, self.val >> m)
 
     @always_inline
@@ -440,7 +431,7 @@ class SparseBitVector(BitVectorWithSize):
         return self._to_generic().sub_int(i)
 
     def print_bits(self):
-        print "SparseBitVector<%s, %s>" % (self.size(), self.val.hex())
+        print("SparseBitVector<%s, %s>" % (self.size(), self.val.hex()))
 
     def lshift(self, i):
         if i < 64:
@@ -620,7 +611,7 @@ class GenericBitVector(BitVectorWithSize):
         return self.make(self._size_mask(self.rval.sub(i.tobigint())))
 
     def print_bits(self):
-        print "GenericBitVector<%s, %s>" % (self.size(), self.rval.hex())
+        print("GenericBitVector<%s, %s>" % (self.size(), self.rval.hex()))
 
     def lshift(self, i):
         return self.make(self._size_mask(self.rval.lshift(i)))
@@ -751,10 +742,6 @@ class GenericBitVector(BitVectorWithSize):
     def pack(self):
         return (self.size(), r_uint(0xdeaddead), self.rval)
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
 
 class Integer(object):
     _attrs_ = []
@@ -1139,18 +1126,3 @@ class BigInteger(Integer):
 
     def pack(self):
         return (-23, self.rval)
-<<<<<<< HEAD
-
-
-
-
-
-
-
-
-
-
-###################################################################################
-###################################################################################
-=======
->>>>>>> 3d9d87942a0ed3835b5850d2a929f2fcce1a1285
